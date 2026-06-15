@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aut-connectormockserver
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    cd-layout: v2
+    environment: platform3-dev
+    service: aut-connectormockserver
+spec:
+  project: io
+  source:
+    helm:
+      valueFiles:
+        - ../../../environments/platform3-dev/io/aut-connectormockserver/microservice.yaml
+        - ../../../environments/platform3-dev/io/aut-connectormockserver/env.yaml
+    path: charts/microservice
+    repoURL: https://github.com/paramathmuni-sumanth/cd-v2.git
+    targetRevision: main
+  destination:
+    namespace: io
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

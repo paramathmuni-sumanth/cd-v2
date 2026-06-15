@@ -73,6 +73,18 @@ Generate an app manifest:
 ./scripts/generate-argo-app.sh qa-prod io/integrator-workers
 ```
 
+Generate all apps for a domain:
+
+```bash
+./scripts/generate-argo-apps-for-env.sh platform3-dev io
+```
+
+Apply to cluster (after registering cd-v2 in ArgoCD):
+
+```bash
+./scripts/apply-argo-apps.sh platform3-dev io --dry-run
+```
+
 ## Scripts
 
 | Script | Purpose |
@@ -83,6 +95,8 @@ Generate an app manifest:
 | `scaffold-service.sh` | Scaffold one service from upstream |
 | `promote-service.sh` | Copy env folder → env folder |
 | `generate-argo-app.sh` | Generate v2 Argo Application YAML |
+| `generate-argo-apps-for-env.sh` | Generate all apps for an env domain |
+| `apply-argo-apps.sh` | kubectl apply all generated apps |
 
 ### Re-import from upstream
 
