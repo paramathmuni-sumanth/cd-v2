@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openconnections-configmap
+data:
+  script.sh: |
+    #!/bin/bash
+    # Define an array of namespaces
+    namespaces=("ia")
+
+    # Iterate through the list of namespaces
+    for NAMESPACE in "${namespaces[@]}"; do
+        # Use kubectl to get the list of pod names in the current namespace
+        pod_names=$(kubectl get pods -n $NAMESPACE --field-selector=status.phase=Running --output=jsonpath={.items[*].metadata.name})
+
+        # Iterate through the list of pod names in the current namespace
+        for pod_name in $pod_names; do
+            # Get the container name from the pod (assuming a single container per pod)
+            container_name=$(kubectl get pod $pod_name -n $NAMESPACE -o=jsonpath={.spec.containers[0].name})
+
+            # Get the container port from the pod's container (assuming one container port)
+            container_port=$(kubectl get pod $pod_name -n $NAMESPACE -o=jsonpath="{.spec.containers[0].ports[0].containerPort}")
+
+            # Run a curl command on each pod and capture the output
+            curl_output=$(kubectl exec -n $NAMESPACE $pod_name -- sh -c "wget -qO- http://localhost:$container_port/openConnections")
+            echo "$container_name, $pod_name, $curl_output"
+        done
+    done

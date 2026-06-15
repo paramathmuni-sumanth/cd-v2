@@ -1,0 +1,38 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "square-netsuite-ia",
+    "namespace": "argocd",
+    "finalizers": [
+      "resources-finalizer.argocd.argoproj.io"
+    ]
+  },
+  "spec": {
+    "project": "ia",
+    "source": {
+      "helm": {
+        "valueFiles": [
+          "../../ia/square-netsuite-ia/microservice.yaml",
+          "../../ia/square-netsuite-ia/env.yaml"
+        ]
+      },
+      "path": "charts/microservice",
+      "repoURL": "https://github.com/celigo/cd.git",
+      "targetRevision": "platform1-dev-dr"
+    },
+    "destination": {
+      "namespace": "ia",
+      "server": "https://kubernetes.default.svc"
+    },
+    "syncPolicy": {
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "syncOptions": [
+        "CreateNamespace=true"
+      ]
+    }
+  }
+}

@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "file-service"
+    CUSTOM_URI: "http://file-service.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "file-service"
+    pullPolicy: Always
+    tag: ""

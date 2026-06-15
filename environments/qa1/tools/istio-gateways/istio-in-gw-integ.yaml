@@ -1,0 +1,22 @@
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.istio.io/v1beta1","kind":"Gateway","metadata":{"annotations":{},"creationTimestamp":"2023-12-20T10:27:39Z","generation":2,"name":"istio-in-gw-integ","namespace":"istio-gateway","resourceVersion":"263412675","uid":"855cdb29-8fc4-43fd-8e34-9ecfbd960043"},"spec":{"selector":{"app":"istio-ingress"},"servers":[{"hosts":["*"],"port":{"name":"http","number":80,"protocol":"HTTP"}}]}}
+  creationTimestamp: "2023-12-20T10:27:39Z"
+  generation: 3
+  name: istio-in-gw-integ
+  namespace: istio-gateway
+  resourceVersion: "263415852"
+  uid: 855cdb29-8fc4-43fd-8e34-9ecfbd960043
+spec:
+  selector:
+    app: istio-ingress
+  servers:
+  - hosts:
+    - '*'
+    port:
+      name: http
+      number: 80
+      protocol: HTTP

@@ -1,0 +1,220 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/io/sa/integrator-workers-ping
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/core/sa/api-execution
+                  - cluster.local/ns/core/sa/integrator-system-workers
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /metrics
+  common:
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "nosql-db-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 450m
+          memory: 1000Mi
+        requests:
+          cpu: 150m
+          memory: 750Mi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 14400
+      livenessProbe:
+        enabled: true
+        config:
+          exec:
+            command:
+              - /bin/bash
+              - /opt/docker/probe-scripts/probe.sh
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        timeoutSeconds: 12
+        failureThreshold: 5
+        successThreshold: 1
+      podAnnotations:
+        celigo.io/scrape: 'fast'
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 3
+        maxReplicas: 15
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 120
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+      outlierDetection:
+        maxEjectionPercent: 0
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/nosql-db-adaptor-s3-role-k8s-production-eu
+  virtualService:
+    enabled: true
+    hosts:
+      - nosql-db-adaptor.celigo.io
+      - nosql-db-adaptor.io.svc.cluster.local
+  PersistentVolumeClaims:
+    - name: nosql-db-adaptor-cpu-profiling-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-nosql-db-adaptor-cpu-profiling
+  configVolume:
+    probe-config.json: |
+      {
+        "DUMP_ENABLED": true,
+        "HEAP_DUMP_THRESHOLD": 3,
+        "HEAP_DUMP_ENABLED": false,
+        "MAX_PERF_DUMP_PER_HOUR": 2
+      }
+    logLevel.json: |
+      {
+        "default": "info"
+      }
+    newRelic.json: |
+      {
+        "enableNR": true,
+        "distributedNR": true,
+        "transactions": ["custom"],
+        "resources": {
+          "_userId": [],
+          "_importId": [],
+          "_exportId": [],
+          "_connectionId": []
+        }
+      }
+  volumes:
+    - name: probe-config-volume
+      configMap:
+        name: nosql-db-adaptor-config-volume
+    - name: nosql-db-adaptor-cpu-profiling-volume
+      persistentVolumeClaim:
+        claimName: nosql-db-adaptor-cpu-profiling-pvc
+    - name: nosql-db-adaptor-nr-config
+      configMap:
+        name: nosql-db-adaptor-config-volume
+    - name: loglevel-config-volume
+      configMap:
+        name: nosql-db-adaptor-config-volume
+  volumeMounts:
+    - mountPath: /service-core-dumps
+      name: nosql-db-adaptor-cpu-profiling-volume
+    - mountPath: /opt/probe-config
+      name: probe-config-volume
+    - mountPath: "/nosql-db-adaptor/config/"
+      name: nosql-db-adaptor-nr-config
+    - mountPath: "/etc/config/"
+      name: loglevel-config-volume
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - nosql-db-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.17.118.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 3
+          maxReplicas: 15
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="nosql-db-adaptor-app"})
+                threshold: "70"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

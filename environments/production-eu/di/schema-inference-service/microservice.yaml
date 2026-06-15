@@ -1,0 +1,86 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/api-gateway
+                  - cluster.local/ns/di/sa/di-management-service
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 860378520032.dkr.ecr.us-east-1.amazonaws.com
+      name: schema-inference-service
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 700Mi
+        requests:
+          cpu: 800m
+          memory: 500Mi
+      terminationGracePeriodSeconds: 300
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 5
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      outlierDetection:
+        maxEjectionPercent: 0
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/schema-inference-service-s3-role-k8s-production-eu
+  virtualService:
+    enabled: true
+    hosts:
+      - schema-inference-service.di.svc.cluster.local
+      - schema-inference-service.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - schema-inference-service
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.40.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

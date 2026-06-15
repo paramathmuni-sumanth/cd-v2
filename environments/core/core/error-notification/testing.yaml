@@ -1,0 +1,16 @@
+testing:
+  env:
+    SERVICE: "error-notification"
+    CUSTOM_URI: "http://error-notification.core.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "error-notification"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

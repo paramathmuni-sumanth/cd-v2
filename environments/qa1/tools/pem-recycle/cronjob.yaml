@@ -1,0 +1,17 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: pod-deletion-cronjob
+  namespace: core
+spec:
+  schedule: "*/5 * * * *"
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          containers:
+          - name: kubectl
+            image: bitnami/kubectl
+            command: ["kubectl", "delete", "pod", "-l", "app=report", "-n", "core"]
+          restartPolicy: OnFailure

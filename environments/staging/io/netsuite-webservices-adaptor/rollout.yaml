@@ -1,0 +1,25 @@
+service: netsuite-webservices-adaptor
+
+analysis:
+  source: splunk
+  query: >
+    search
+    earliest=-5m 
+    index=staging-adaptors
+    k8s.container.name=netsuite-webservices-adaptor
+    k8s.pod.name=*canary*
+    (level IN ("error", "fatal") OR *fatal* OR *unexpected* OR *unhandled* OR *uncaught* OR TypeError)
+    NOT logName=serverHit NOT logName=onSendResponse NOT new_relic_response NOT wsId=*fatal* NOT logName=fatalError
+    | eval fail=if(match(_raw, "(?i)fatal|unexpected|typeerror|unhandled|uncaught"), 1, 0),
+           fatal=if(level="fatal", 1, 0)
+    | stats sum(fail) as failCount,
+            sum(fatal) as fatalCount
+    | eval finalResultHolder=case(
+               fatalCount > 0 OR failCount > 0, "false",
+               true(), "true"
+           )
+    | appendpipe [| stats count | where count==0 | eval failCount=0, fatalCount=0, finalResultHolder="true" | fields - count]      
+    | fields failCount, fatalCount, finalResultHolder
+
+  frequency: 5m
+disabled: true

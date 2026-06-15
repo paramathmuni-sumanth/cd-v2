@@ -1,0 +1,114 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/salesforce-adaptor
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/as2-adaptor
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/testing/sa/loadtesting
+                  - cluster.local/ns/core/sa/api-execution
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "http-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 0
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2000m
+          memory: 3302Mi
+        requests:
+          cpu: 500m
+          memory: 2790Mi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        traffic.sidecar.istio.io/excludeOutboundPorts: '15001'
+        redeployTimestamp: 2025-12-17-19-22
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::776457608093:role/http-adaptor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - http-adaptor.celigo.io
+      - http-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - http-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  PersistentVolumeClaims:
+    - name: http-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-enterprise-logs
+  volumes:
+    - name: http-nfs-storage
+      persistentVolumeClaim:
+        claimName: http-nfs-pvc
+  volumeMounts:
+    - mountPath: "/mnt/efs"
+      name: http-nfs-storage
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.523.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

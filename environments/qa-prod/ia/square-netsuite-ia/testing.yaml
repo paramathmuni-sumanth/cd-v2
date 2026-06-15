@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "square-netsuite-ia"
+    CUSTOM_URI: "http://square-netsuite-ia.ia.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "square-netsuite-ia"
+    pullPolicy: Always
+    tag: ""

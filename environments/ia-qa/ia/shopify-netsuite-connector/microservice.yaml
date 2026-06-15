@@ -1,0 +1,95 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/endpoint-service
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "shopify-netsuite-connector"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1300m
+          memory: 840Mi
+        requests:
+          cpu: 220m
+          memory: 280Mi
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      podAnnotations:
+        redeployTimestamp: 2026-02-23-15-30
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 3
+        maxReplicas: 5
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::027986264538:role/shopify-netsuite-connector-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - shopify-netsuite-connector.ia.celigo.io
+      - shopify-netsuite-connector.ia.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - shopify-netsuite-connector
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: 2026.7.1-fb-1.58.0.233.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

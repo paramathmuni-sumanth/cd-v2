@@ -1,0 +1,455 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/core/sa/api-execution
+                  - cluster.local/ns/testing/sa/loadtesting
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /metrics
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "data-warehouse-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2000m
+          memory: 2Gi
+        requests:
+          cpu: 750m
+          memory: 1500Mi
+      livenessProbe:
+        enabled: true
+        config:
+          exec:
+            command:
+              - /bin/bash
+              - /opt/docker/probe-scripts/probe.sh
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      podAnnotations:
+        redeployTimestamp: 2026-04-15-21-00
+        celigo.io/scrape: 'fast'
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 4
+        maxReplicas: 15
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/data-warehouse-adaptor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - data-warehouse-adaptor.celigo.io
+      - data-warehouse-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - data-warehouse-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    newRelic.json: |
+      {
+        "enableNR": true,
+        "distributedNR": true,
+        "transactions": ["all", "custom"],
+        "resources": {
+          "_userId": [],
+          "_importId": [],
+          "_exportId": [],
+          "_connectionId": []
+        }
+      }
+    probe-config.json: |
+      {
+        "DUMP_ENABLED: true,
+        "HEAP_DUMP_THRESHOLD": 3,
+        "HEAP_DUMP_ENABLED": false,
+        "MAX_PERF_DUMP_PER_HOUR": 2
+      }
+    logLevel.json: |
+      {
+        "default": "debug"
+      }
+  PersistentVolumeClaims:
+    - name: data-warehouse-adaptor-fs-08c5cfab3a09b34c2
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-dwh
+    - name: data-warehouse-adaptor-fs-03926db75e0d38bd2
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-http-adaptor
+  volumes:
+    - name: data-warehouse-adaptor-nfs-extra
+      persistentVolumeClaim:
+        claimName: data-warehouse-adaptor-fs-03926db75e0d38bd2
+    - name: data-warehouse-adaptor-nfs-storage
+      persistentVolumeClaim:
+        claimName: data-warehouse-adaptor-fs-08c5cfab3a09b34c2
+    - name: data-warehouse-adaptor-nr-config
+      configMap:
+        name: data-warehouse-adaptor-config-volume
+    - name: probe-config-volume
+      configMap:
+        name: data-warehouse-adaptor-config-volume
+    - name: data-warehouse-adaptor-log-level
+      configMap:
+        name: data-warehouse-adaptor-config-volume
+  volumeMounts:
+    - mountPath: "/data-warehouse-adaptor/bulk_load_files/"
+      name: data-warehouse-adaptor-nfs-storage
+    - mountPath: "/data-warehouse-adaptor/config/"
+      name: data-warehouse-adaptor-nr-config
+    - mountPath: "/etc/config/"
+      name: data-warehouse-adaptor-log-level
+    - mountPath: /service-core-dumps
+      name: data-warehouse-adaptor-nfs-extra
+    - mountPath: /opt/probe-config
+      name: probe-config-volume
+  deployments:
+    - name: devops-13536
+      deployment:
+        image:
+          tag: 2026.5.2-patch-0.1.16.216.0
+        resources:
+          limits:
+            cpu: 1.5
+            memory: 3000Mi
+          requests:
+            cpu: 450m
+            memory: 2500Mi
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 4
+          maxReplicas: 15
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="data-warehouse-adaptor-devops-13536"})
+                threshold: "50"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              executionContextUserId:
+                regex: '^(66cdf01e2b903592d14af806)$'
+      sidecar:
+        enabled: true
+        inboundConnectionPool:
+          tcp:
+            maxConnections: 75
+    - name: dideployment
+      deployment:
+        image:
+          tag: ml-0.1.14.160.0
+        resources:
+          limits:
+            cpu: 1.5
+            memory: 2000Mi
+          requests:
+            cpu: 450m
+            memory: 1500Mi
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 5
+          maxReplicas: 15
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="data-warehouse-adaptor-dideployment"})
+                threshold: "60"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(69b762fb9df81177cda7f24b|69b8f12651a6e580a183d6ac)$'
+    - name: bulkload-testing
+      deployment:
+        image:
+          tag: ml-0.1.14.160.0
+        resources:
+          limits:
+            cpu: 1.5
+            memory: 2000Mi
+          requests:
+            cpu: 450m
+            memory: 1500Mi
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 2
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="data-warehouse-adaptor-bulkload-testing"})
+                threshold: "60"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(6527de374082d82938958985)$'
+    - name: dwh-keda-autoscaling-single-temp-pod
+      deployment:
+        image:
+          tag: ml-0.1.15.162.0
+        resources:
+          limits:
+            cpu: 1.5
+            memory: 2000Mi
+          requests:
+            cpu: 450m
+            memory: 1500Mi
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 1
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="data-warehouse-adaptor-app"})
+                threshold: "3000"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(import-test-user-dwh-keda-autoscaling)$'
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.1.15.162.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 4
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="data-warehouse-adaptor-app"})
+                threshold: "120"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

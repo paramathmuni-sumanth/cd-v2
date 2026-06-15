@@ -1,0 +1,87 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/api-gateway
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 860378520032.dkr.ecr.us-east-1.amazonaws.com
+      name: integrator-bff
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 750m
+          memory: 2Gi
+        requests:
+          cpu: 500m
+          memory: 1Gi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 300
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 50
+        targetMemoryUtilizationPercentage: 50
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      outlierDetection:
+        maxEjectionPercent: 0
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/integrator-bff-s3-role-k8s-production-eu
+  virtualService:
+    enabled: true
+    hosts:
+      - integrator-bff.ui.svc.cluster.local
+      - integrator-bff.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-bff
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.41.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "error-classifier-v2"
+    CUSTOM_URI: "http://error-classifier-v2.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "error-classifier-v2"
+    pullPolicy: Always
+    tag: ""

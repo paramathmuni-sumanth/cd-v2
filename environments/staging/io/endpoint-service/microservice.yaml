@@ -1,0 +1,115 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/api-gateway
+                  - cluster.local/ns/di/sa/di-management-service
+                  - cluster.local/ns/io/sa/internal-gateway
+                  - cluster.local/ns/io/sa/lookup-cache
+                  - cluster.local/ns/io/sa/ai-agent-adaptor
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    image:
+      repository: 860378520032.dkr.ecr.us-east-1.amazonaws.com
+      name: endpoint-service
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 3
+          memory: 3584Mi
+        requests:
+          cpu: 1
+          memory: 3328Mi
+      terminationGracePeriodSeconds: 3600
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 13
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::609704034070:role/endpoint-service-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - endpoint-service.io.svc.cluster.local
+      - endpoint-service.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - endpoint-service
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    logLevel.json: |
+      {
+        "default": "info"
+      }
+  volumes:
+    - name: config-volume
+      configMap:
+        name: endpoint-service-config-volume
+  volumeMounts:
+    - name: config-volume
+      mountPath: /etc/config
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: 2026.5.2-patch-fb-0.0.1.810.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

@@ -1,0 +1,93 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/io/sa/api-gateway
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: audit-service
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 260m
+          memory: 512Mi
+        requests:
+          cpu: 200m
+          memory: 300Mi
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      podAnnotations:
+        redeployTimestamp: 2024-05-09-11-00
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::620736318138:role/audit-service-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - audit-service.io.svc.cluster.local
+      - audit-service.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - audit-service
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.1.38.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

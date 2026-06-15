@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-qic-sync
+  namespace: internal
+  labels:
+    app: ai-qic-sync
+    app.kubernetes.io/name: ai-qic-sync
+spec:
+  type: ClusterIP
+  ports:
+    - name: health
+      port: 3335
+      targetPort: 3335
+      protocol: TCP
+  selector:
+    app: ai-qic-sync

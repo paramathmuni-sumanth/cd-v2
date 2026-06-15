@@ -1,0 +1,38 @@
+{
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+        "name": "execution-logs-ingestion",
+        "namespace": "argocd",
+        "finalizers": [
+            "resources-finalizer.argocd.argoproj.io"
+        ]
+    },
+    "spec": {
+        "project": "core",
+        "source": {
+            "helm": {
+                "valueFiles": [
+                    "../../core/execution-logs-ingestion/microservice.yaml",
+                    "../../core/execution-logs-ingestion/env.yaml"
+                ]
+            },
+            "path": "charts/microservice",
+            "repoURL": "https://github.com/celigo/cd.git",
+            "targetRevision": "qa1"
+        },
+        "destination": {
+            "namespace": "core",
+            "server": "https://kubernetes.default.svc"
+        },
+        "syncPolicy": {
+            "automated": {
+                "prune": true,
+                "selfHeal": true
+            },
+            "syncOptions": [
+                "CreateNamespace=true"
+            ]
+        }
+    }
+}

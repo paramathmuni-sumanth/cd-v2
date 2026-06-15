@@ -1,0 +1,305 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mtls-configmap
+data:
+  script.sh: |
+    #!/bin/bash
+    set -e
+    # Certificate generation configuration
+    FQDN=ai-agent-executor.celigo.io
+    SERVICE_NAME=ai-agent-executor
+    COUNTRY="US"
+    STATE="California"
+    LOCALITY="San Mateo"
+    ORG="Celigo"
+    ORG_UNIT="Celigo"
+    EMAIL="lakshit.saini@celigo.com"
+    AWS_REGION="ap-south-1"
+    CLIENT_FQDN="integrator"
+    REGENERATE=true
+
+    # Check if FQDN and SERVICE_NAME are empty strings
+    if [[ -z "$FQDN" || -z "$SERVICE_NAME" ]]; then
+      echo "FQDN or SERVICE_NAME is empty. Aborting script."
+      exit 0
+    fi
+
+    # Create certificate file names
+    SERVICE_NAME_CERT=$(echo $SERVICE_NAME | tr '[:lower:]-' '[:upper:]_')
+    MCA="$SERVICE_NAME_CERT"_MTLS_CERTIFICATE_AUTHORITY.txt
+    MCC="$SERVICE_NAME_CERT"_MTLS_CLIENT_CERTIFICATE.txt
+    MCK="$SERVICE_NAME_CERT"_MTLS_CLIENT_KEY.txt
+
+
+    #Run only if not regenerating
+    if [ "$REGENERATE" = false ]; then
+      # Check if any of the cert files exist in the folders
+      for file in "$MCA" "$MCC" "$MCK"; do
+        if aws s3 ls "s3://qa-environment-variables-staging/integrator/$file" || aws s3 ls "s3://qa-environment-variables-staging/integratorqgw/$file"; then
+            echo "Error: $file already exists in qa-environment-variables-staging"
+            exit 0
+        fi
+      done
+    fi
+
+    QA_PROD_ROLE_ARN="arn:aws:iam::689472371083:role/cross-account-mtls-access"
+    ROLE_SESSION_NAME="QAProdCAAccess"
+    
+    ASSUME_ROLE_OUTPUT=$(aws sts assume-role \
+      --role-arn "$QA_PROD_ROLE_ARN" \
+      --role-session-name "$ROLE_SESSION_NAME" \
+      --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
+      --output text)
+    
+    # Extract the temporary credentials
+    export AWS_ACCESS_KEY_ID=$(echo $ASSUME_ROLE_OUTPUT | awk '{print $1}')
+    export AWS_SECRET_ACCESS_KEY=$(echo $ASSUME_ROLE_OUTPUT | awk '{print $2}')
+    export AWS_SESSION_TOKEN=$(echo $ASSUME_ROLE_OUTPUT | awk '{print $3}')
+
+    # Get CERT_ARN
+    CERT_ARN=$(aws acm-pca list-certificate-authorities --region "${AWS_REGION}" | jq -r '.CertificateAuthorities[] | select(.CertificateAuthorityConfiguration.Subject.CommonName=="Celigo PCA") | .Arn')
+    echo $CERT_ARN
+
+    # Generate server certificate
+    openssl req -new -newkey rsa:2048 -nodes \
+    -keyout server.key -out server.csr \
+    -subj "/C=${COUNTRY}/ST=${STATE}/L=${LOCALITY}/O=${ORG}/OU=${ORG_UNIT}/CN=${FQDN}/emailAddress=${EMAIL}"
+
+
+    # Issue certificate with AWS ACM PCA
+    SERVER_CERT_ARN=$(aws acm-pca issue-certificate \
+    --certificate-authority-arn "${CERT_ARN}" \
+    --csr fileb://server.csr \
+    --signing-algorithm "SHA256WITHRSA" \
+    --validity Value=1,Type="YEARS" \
+    --idempotency-token 1234 \
+    --region "${AWS_REGION}" | jq -r '.CertificateArn' )
+
+
+    # Wait
+    echo "Waiting 5 seconds for the server certificate to get issued..."
+    sleep 5
+
+
+    # Get server certificates and save them
+    aws acm-pca get-certificate \
+    --certificate-authority-arn "${CERT_ARN}" \
+    --certificate-arn "${SERVER_CERT_ARN}" \
+    --region "${AWS_REGION}" \
+    --output text > server.crt
+
+
+    # Copy server.crt into ca.crt
+    cp server.crt ca.crt
+
+
+    # Generate client certificate
+    openssl req -new -newkey rsa:2048 -nodes \
+    -keyout client.key -out client.csr \
+    -subj "/C=${COUNTRY}/ST=${STATE}/L=${LOCALITY}/O=${ORG}/OU=${ORG_UNIT}/CN=${CLIENT_FQDN}/emailAddress=${EMAIL}"
+
+
+    # Issue certificate with AWS ACM PCA
+    CLIENT_CERT_ARN=$(aws acm-pca issue-certificate \
+    --certificate-authority-arn "${CERT_ARN}" \
+    --csr fileb://client.csr \
+    --signing-algorithm "SHA256WITHRSA" \
+    --validity Value=1,Type="YEARS" \
+    --idempotency-token 1234 \
+    --region "${AWS_REGION}" | jq -r '.CertificateArn' )
+
+
+    # Wait
+    echo "Waiting 5 seconds for the client certificate to get issued..."
+    sleep 5
+
+
+    # Get CA and client certificates and save them
+    aws acm-pca get-certificate \
+    --certificate-authority-arn "${CERT_ARN}" \
+    --certificate-arn "${CLIENT_CERT_ARN}" \
+    --region "${AWS_REGION}" \
+    --output text > client.crt
+
+
+    # Remove FQDN certificate (non root) from ca.crt
+    sed '2,/-----BEGIN/d' ca.crt > ca1.crt
+    mv ca1.crt ca.crt
+
+
+    # Remove root certificate from client.crt
+    sed '/-----END/,$d' client.crt > client1.crt
+    tail -1 client.crt >> client1.crt
+    mv client1.crt client.crt
+
+
+    # Remove root certificate from server.crt
+    sed '/-----END/,$d' server.crt > server1.crt
+    tail -1 server.crt >> server1.crt
+    mv server1.crt server.crt
+
+    unset AWS_ACCESS_KEY_ID
+    unset AWS_SECRET_ACCESS_KEY
+    unset AWS_SESSION_TOKEN
+
+    #Update existing certificate secret in cluster if regenerating, else create
+    if [ "$REGENERATE" = true ]; then
+      kubectl create secret generic "${SERVICE_NAME}"-tls-credential --save-config --from-file=tls.key=server.key --from-file=tls.crt=server.crt --from-file=ca.crt=ca.crt -n istio-ingress --dry-run=client -o yaml | kubectl apply -n istio-ingress -f - --overwrite
+    else
+      kubectl create secret generic "${SERVICE_NAME}"-tls-credential --from-file=tls.key=server.key --from-file=tls.crt=server.crt --from-file=ca.crt=ca.crt -n istio-ingress
+    fi
+    sleep 5
+
+    #Run only if not regenerating
+    if [ "$REGENERATE" = false ]; then
+      # Take backup of istio-in-gw
+      kubectl get gw istio-in-gw -n istio-gateway -o yaml > gateway-backup.yaml
+      sleep 5
+
+      # Add hosts in instio-in-gw
+      kubectl patch gateway istio-in-gw -n istio-gateway --type='json' \
+      -p '[{"op": "add", "path": "/spec/servers/-", "value": {
+                "hosts": ["'"$FQDN"'"],
+                "port": {
+                  "name": "'"$SERVICE_NAME"'-https",
+                  "number": '443',
+                  "protocol": "HTTPS"
+                },
+                "tls": {
+                  "credentialName": "'"$SERVICE_NAME"'-tls-credential",
+                  "mode": "MUTUAL"
+                }
+              }}]'
+      sleep 5
+
+      kubectl patch gateway istio-in-gw -n istio-gateway --type='json' \
+      -p '[{"op": "add", "path": "/spec/servers/-", "value": {
+                "hosts": ["'"$FQDN"'"],
+                "port": {
+                  "name": "'"$SERVICE_NAME"'-http",
+                  "number": '80',
+                  "protocol": "HTTP"
+                },
+                "tls": {
+                  "httpsRedirect": true
+                }
+              }}]'
+      sleep 5
+    fi
+
+    # Create certificate files to upload in s3 bucket folders
+    cp ca.crt "$MCA"
+    cp client.crt "$MCC"
+    cp client.key "$MCK"
+
+
+    # Upload cert files to S3
+    for file in "$MCA" "$MCC" "$MCK"; do
+    node -e "$(cat <<END
+    const AWS = require('aws-sdk');
+    const fs = require('fs');
+
+    const s3Bucket = 'qa-environment-variables-staging';
+    const s3PrefixIntegrator = 'integrator/';
+    const s3PrefixIntegratorQgw = 'integratorqgw/';
+    const file = '$file';
+    const awsRegion = process.env.AWS_REGION;
+
+    AWS.config.update({ region: awsRegion });
+    const s3 = new AWS.S3();
+
+    const uploadFile = async (filePath, s3Key) => {
+        const fileStream = fs.createReadStream(filePath);
+
+        const uploadParams = {
+            Bucket: s3Bucket,
+            Key: s3Key,
+            Body: fileStream,
+            ServerSideEncryption: 'AES256',
+        };
+
+        return s3.upload(uploadParams).promise();
+    };
+
+    (async () => {
+        try {
+            const integratorKey = s3PrefixIntegrator + file;
+            await uploadFile(file, integratorKey);
+            console.log(\`Uploaded \${file} to \${integratorKey}\`);
+
+            const integratorQgwKey = s3PrefixIntegratorQgw + file;
+            await uploadFile(file, integratorQgwKey);
+            console.log(\`Uploaded \${file} to \${integratorQgwKey}\`);
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    })();
+    END
+    )"
+    done
+
+    # getting GIT_PAT_WRITE from s3
+    aws s3 cp s3://celigo-k8s-qa-env-vars/infra-tasks/GIT_PAT_WRITE.txt GIT_PAT_WRITE.txt
+    name="GIT_PAT_WRITE"
+    content=$(cat "GIT_PAT_WRITE.txt")
+    export "${name}"="${content}"
+
+    # configuring git 
+    git config --global user.email "bot_user"
+    git config --global user.name "bot_user"
+
+    # cloning git branch and updating gateways
+    git clone -b qa1 https://$GIT_PAT_WRITE@github.com/celigo/cd.git --single-branch
+    cd cd/tools
+    mkdir -p istio-gateways
+    cd istio-gateways
+    kubectl get gw istio-in-gw -n istio-gateway -o yaml > istio-in-gw.yaml
+    kubectl get gw istio-in-gw-integ -n istio-gateway -o yaml > istio-in-gw-integ.yaml
+    git status
+    git add .
+    git commit -m "adding istio-gateways changes after new service onboard"
+    git push https://$GIT_PAT_WRITE@github.com/celigo/cd.git
+
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mtls-script-execution-job
+spec:
+  completions: 1
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 0
+  template:
+    spec:
+      serviceAccountName: mtls-access-serviceaccount
+      containers:
+      - name: amazonlinux
+        image: public.ecr.aws/c4g3p9t9/amazonlinux:14.18.1-8.6.0
+        command: ["/bin/bash"]
+        args: 
+        - -c
+        - |
+          yum install -y jq python3 python3-pip git
+          curl -LO "https://bootstrap.pypa.io/get-pip.py"
+          python3 get-pip.py --force-reinstall
+          pip3 install awscli
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+          cd /root
+          ls -l
+          npm install aws-sdk
+          ./script.sh
+        volumeMounts:
+        - name: script-volume
+          mountPath: /root/script.sh
+          subPath: script.sh
+          readOnly: false
+      restartPolicy: Never
+      volumes:
+      - name: script-volume
+        configMap:
+          name: mtls-configmap
+          defaultMode: 0777

@@ -1,0 +1,23 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: argocd-metrics
+  namespace: default
+spec:
+  schedule: "15 18 * * *"
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: argocd-metrics-serviceaccount
+          containers:
+          - name: argocd-metrics
+            image: 341118756977.dkr.ecr.ap-south-1.amazonaws.com/productivity-metrics:argocd
+            imagePullPolicy: Always
+            env:
+            - name: BUCKET_NAME
+              value: "celigo-k8s-qa-env-vars"
+            - name: AWS_REGION
+              value: "ap-south-1"
+          restartPolicy: OnFailure

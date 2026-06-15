@@ -1,0 +1,111 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/io/sa/api-gateway
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/io/sa/integrator-workers-ping
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/internal-gateway
+                  - cluster.local/ns/core/sa/streaming-service
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "webhooks"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1400m
+          memory: 1.2Gi
+        requests:
+          cpu: 400m
+          memory: 0.7Gi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 480
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 4
+        maxReplicas: 30
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      outlierDetection:
+        maxEjectionPercent: 0
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/webhooks-s3-role-k8s-production-eu
+  virtualService:
+    enabled: true
+    hosts:
+      - webhooks.celigo.io
+      - webhooks.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - webhooks
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: application-type
+                operator: In
+                values:
+                  - core_auth
+  tolerations:
+    - key: "application-type"
+      operator: "Equal"
+      value: "core_auth"
+      effect: "NoSchedule"
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: 2026.5.2-patch-0.0.1.86.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

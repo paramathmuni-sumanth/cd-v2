@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "nosql-db-adaptor"
+    CUSTOM_URI: "http://nosql-db-adaptor.master-dev-io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "nosql-db-adaptor"
+    pullPolicy: Always
+    tag: ""

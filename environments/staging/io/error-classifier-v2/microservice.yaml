@@ -1,0 +1,106 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/io/sa/integrator-workers-ping
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "error-classifier-v2"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 5
+          memory: 4Gi
+        requests:
+          cpu: 2
+          memory: 3Gi
+      terminationGracePeriodSeconds: 330
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::609704034070:role/error-classifier-v2-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - error-classifier-v2.celigo.io
+      - error-classifier-v2.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - error-classifier-v2
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: application-type
+                operator: In
+                values:
+                  - error_classifier_v2
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  tolerations:
+    - key: "application-type"
+      operator: "Equal"
+      value: "error_classifier_v2"
+      effect: "NoSchedule"
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.111.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

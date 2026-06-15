@@ -1,0 +1,350 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/salesforce-adaptor
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/io/sa/as2-adaptor
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/core/sa/api-execution
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/ai-agent-adaptor
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /metrics
+  common:
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "http-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      livenessProbe:
+        enabled: true
+        config:
+          exec:
+            command:
+              - /bin/bash
+              - /opt/docker/probe-scripts/probe.sh
+        initialDelaySeconds: 20
+        periodSeconds: 15
+        timeoutSeconds: 10
+        failureThreshold: 10
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2000m
+          memory: 3302Mi
+        requests:
+          cpu: 0.8
+          memory: 2790Mi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 86400
+      podAnnotations:
+        celigo.io/scrape: 'fast'
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 311
+        maxReplicas: 415
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          tcpKeepalive:
+            time: 7200s
+            interval: 75s
+  ingress:
+    enabled: false
+  service:
+    extraLabels:
+      istio.io/persistent-session-header: x-session-header
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/http-adaptor-s3-role-k8s-production-na
+  virtualService:
+    enabled: true
+    hosts:
+      - http-adaptor.celigo.io
+      - http-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - http-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  PersistentVolumeClaims:
+    - name: http-adaptor-nfs-pvc-v2
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-http-adaptor
+    - name: http-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-enterprise-logs
+  configVolume:
+    probe-config.json: |
+      {
+        "DUMP_ENABLED": true,
+        "HEAP_DUMP_THRESHOLD": 3,
+        "HEAP_DUMP_ENABLED": false,
+        "MAX_PERF_DUMP_PER_HOUR": 1
+      }
+    newRelic.json: |
+      {
+        "enableNR": true,
+        "transactions": ["custom"],
+        "resources": {
+          "_flowId": [],
+          "_connectionId": ["653c09e77bceda016f45268a", "64d1598d4e3aa6734e1cfceb", "655341fa3b50da216e4ff60b", "5e175ffe353e3c7b51dd33b8", "661d2be90938a340f0eb8ba3"],
+          "_exportId": ["656e792f10be60191d1e532f", "64d402c33bfeea5dcd9d7164", "65535f5557f7f566040d5a2d", "5e2715cb49ad3f13c01b3fb9", "668d3a9a7d84f0e7718c1e11", "668d4c040d04e98035add14c", "666051625f6e9a8c01e18afd", "660ac5c15e98170673996d81"],
+          "_importId": ["66707c420b17e44a54208426","60dcc4e97240195d282ab9d1", "62018f61d5863c6264f41c83", "62389a6d0afa004e389c3eeb", "63a16c86aea13052489c5e73", "66e8a794006d6394f94192ca", "66fad9ff85f2459a47fd858b", "66e1fb65cdfd8b4b8fa949e9", "668d3a9a7d84f0e7718c1e4e", "668d4c040d04e98035add171", "666051625f6e9a8c01e18b37", "666051625f6e9a8c01e18b35", "668d4c4da73fa1af210fb683", "666051c7b38abcbd3876ae7b","67858136d4f1f8442028d64a","67833426c2addf2100efb4f3","6783349bd6e2f4fef8b6ff5f","6783344932e7f16f3b813bcb","67833478c2addf2100efc074","6785804da8dc0072f95b6ebd","6785815cc2addf21006074d1","6643aaffb482e58fe5398273","6726c06328a4d4ca3203a4d3","66b39ac37b3ec413458fa5fa","67d9a09e2b1e13b20a97600a"]
+        }
+      }
+  volumes:
+    - name: http-adaptor-nr-config
+      configMap:
+        name: http-adaptor-config-volume
+    - name: probe-config-volume
+      configMap:
+        name: http-adaptor-config-volume
+    - name: http-adaptor-nfs-storage
+      persistentVolumeClaim:
+        claimName: http-adaptor-nfs-pvc-v2
+    - name: http-nfs-storage
+      persistentVolumeClaim:
+        claimName: http-nfs-pvc
+  volumeMounts:
+    - mountPath: "/http-adaptor/config/"
+      name: http-adaptor-nr-config
+    - mountPath: "/service-core-dumps"
+      name: http-adaptor-nfs-storage
+    - mountPath: "/opt/probe-config"
+      name: probe-config-volume
+    - mountPath: "/mnt/efs"
+      name: http-nfs-storage
+  deployments:
+    - name: xmldom-users
+      deployment:
+        image:
+          tag: xmldom-users-fb-1.0.0.1075.0
+      hpa:
+        autoscaling:
+          enabled: true
+          maxReplicas: 5
+          minReplicas: 2
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              connectionid:
+                regex: ^(5f3ac93bdcde5a12c8b3bbc9|5f763a6d352e294ad00163ce|606510be0e4a641918db9c11)$
+    - name: di-deployment
+      deployment:
+        image:
+          tag: ml-1.0.0.527.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 5
+          maxReplicas: 15
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="http-adaptor-di-deployment"})
+                threshold: "70"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              executionContextUserId:
+                regex: '^(66fe82fb1179747333e7fe3a)$'
+    - name: hpe-headers-temp-app
+      env:
+        NODE_OPTIONS: "--insecure-http-parser --max-old-space-size=2278  --heapsnapshot-signal=SIGUSR2"
+      deployment:
+        image:
+          tag: ml-1.0.0.527.0
+        podAnnotations:
+          celigo.io/scrape: 'slow'
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 3
+          maxReplicas: 6
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(5fa3e03cfdaddb7eadf2af2a|62b4568f3e29565ea09cc9aa|6066f4d156081d1f42783dc8)$'
+    - name: erp-restart-app
+      deployment:
+        image:
+          tag: ml-1.0.0.527.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 5
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              connectionid:
+                regex: '^(652fe6a6adedb56cbc46338a)$'
+    - name: long-running-conns
+      deployment:
+        image:
+          tag: ml-1.0.0.527.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 12
+          maxReplicas: 31
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              connectionid:
+                regex: '^(67aa08e6939702449288c50e|687e9c85b7dbfb53fec33789|6819236252d5f629d897041d|648a5d9047f2b108568b4a1e|660eef00c606d767a2b55eb9|66901ae197b090e49fffd717|67b50f55e45b776f3f49f45b|605c4985ed552a475cceb8de|668593cbe478778308fd575f|68471f4a75570c49c3760f0f|659c281ec89f9120301fb0ce|67d7e8cd37eb35ac87bb99bf|6386c8c611ff503a5308f884|63519ccb4c63e439a52aa7eb|67466aeee0c40064d9b44fa9|68124af24432714ded2d2cc2|6863ee36e53ccd5cd1a4ecd3|67329a42af32f7cc618a6135|6662e1be76867e29a148ff1e|67b72e28f21e7fb8203a7b63|64a58499d3c51b7b0ae2a569|5e30a5e28a0862394e921055|66cf5b7335ce0d761552dc16|677415cf7aed0516c4cb1f37|652f0f91af4e70522482ae72|660c3bee732de75d98335b1a|658deee968a0b27ac05d2ac1|651dd3e305fe9f35efacab56|67d071b0c04a2d14b6d81814|685aa6c752a7c67a00c9872f|64d52a998e216144eee305ec|63cfe989419b4f4a35bceaf1|63d85b16d61be95c5138c658|660fc9644b02a19acbe27ce9|64c2989ac0228b645b9d4349|689cb8a2ebbf7a9070af86d5|656d095910be60191d1e0160|626e7e335d3c7d2e58196a62|65289045b7b6114f3c2c4fb5|67d08ab0c04a2d14b6dc6094)$'
+          - headers:
+              connectionid:
+                regex: '^(60e3d56cffef7d1400bc4a41|67238343f9e48615ea09d1cd|6573a5d038791f4f52925342|675af57c43f61e2d94620ff5|6837de835e21c9253fef7161|67952c4e66303f644f67442d|67605c7723b7cc50dc762a0e|64bb0bdf4170600219ca370c|62dea53a0439064992a7b7e8|5fb7f420f058384e00f331ed|688776f0590cad69c52b134b|6258b59b6851787c2ab78fb3|654147cac7439d60019086da|662b9e8475d810b2953f0f42|636eeb1fded507137647d935|65d7fe84e9fe485724adabec|64d528a84a3ffe11a95cb7ec|674fc76aec00ca80727e9dae|652e8a349e13c84f54fd8712|60c20a8f6c03332080f64e2c|6814e193f710f05e8f872973|68a67a1b6f6f32e438f50c89|64ae6af5d3075444fba076dc|64186f14b2127d0aafd47373|66f6e771acccc7a3b123acf3|6759cb84574fe2c4f4385c97|5de6c125c3953a5336384ac3|61086727ee58682f636d9faa|66a109e097b090e49f1aebe7|637d1e131bc88a596815af06|5f225a690d967650da751096|6807dbe77d181f7c9884532a|66f6eba7345ef043726a8bb8|653ff70f9c4de9261dcbc3b7|5da4803aa0abf2295d83a6f3|61560b98081f375f36af42e4|60e3dfb0c88d6b10f0bfb78a|685efe022a483c98dcca60cd|65df59d2a3816fe71a5935fe|64dbb1b76ccc5928bc6d0269)$'
+          - headers:
+              connectionid:
+                regex: '^(63d2f97fe03d8159298794dc|621e4e79056d4d11567721a5|664cfd5923141b226d2da10f|624f65cea7574d3ed910811c|685a8e252a483c98dcb581ac|634d9f9fa8b1e74bb0f0a5a5|68397e255e21c9253f49b970|6716bc7f404e7fc50f0ea5ae|64de2044292c425ebc62b4de|65c0f6601d2322154e4a9fe7|64ecd38f3ef68a4b6429be24|65de5f512b2c2f2c939b7472|6541f35b03fe884d7277a2c3|6719f97a540989a5264e3219|617910dd6e6bb62b0439eca9|6243d4fdda31e165c7cfc4dc|63601f3f2ff80549df3dfae6|637e56837b90cf4ae1ba5650|60e3df87fa12b015d5a09bb2|67608fc5a2262bbfb638a339|67eb072299ea21ac5e5edd8e|67e6ba7a99ea21ac5e595c0d|6875637e80275af8707ec2f7|5cb5b256e1aee237819abcaa|5e2a0c99be356535b2c2a611|66a01fd47c822212fa92aeb1|672a897ef9e48615ea6072e1|68938d2ad78f008bab130552|60080530632d5f385c2d7112|5d23c353cacc3b2c2dedb81c|6266b30951ea9520b69653a7|689c19c7a8d495aa00877007|640b3940cb9c51281c2ff032|64ca5f5a34534932047c3139|5fb7d8d7aeff166798d3674c|620bf7aced8e1b7e20968f49|62e92059505087108cd87dec|64ffb91a37de007cb67911d8|660f0610732de75d98d46cb1|63bc8a1323b690523dcfc62f)$'
+          - headers:
+              connectionid:
+                regex: '^(6570a31487a804016ab598d2|5acf8a9381aef80b5aded65e|62b5c4c8a72e780bb90b4250|65f1425c28f7c2e1439e0b08|5cabc00d00301252d84677c3|6570c0f99d2d5a5470937d02|6874978f715f90eb2825b0f9|677d37d0da961722467f201c|643ee100a1c42a1bdbfdd6c6|667dbdc37d84f0e77169c101|68ba8854b3c1fde6bf0aa204|664cfad4ae0cf8959f7cfabc|66bb967427d4d09b4cfaf1da|60eec49ddce9bf1f680e90c4|67ddb4e4e9ec9ef7b7021596|67f626c04f9e746369cddc70|661918cc57499c8e7a95e531|670c547906ebb41878940ab3|67d0350839b32d6183cf7c32|66e07dbcfaadff757292cd5f|67d11c6d0e6631d838ffac96|6568e980f75b9609258077cf|67d5b7d8e5e2969071a2bc39|64d489ab1514937abb137a44|65b7f51a2b3c232a2fc5b133|6489e5acba81ed45a63c640c|687f2acc803ea0e7e1826c0f)$'
+          - headers:
+              connectionid:
+                regex: '^(652d8102a5614d28acf99790|5f96fa5a330f517232e2a1e3|62fd68df773d207a055bbdcb|65d640812b2c2f2c93f7d94e|67aa08e6939702449288c50e|614c985cf5f1d1658556e659|659ec0a1ab9d394b7ef12537|6793ca383af89547e97be0d0|62068c58f4746a75ab4d6911|5b9fb58f90327b43caa5f009|6838de51774ae78d3b163889|651c328cde546142b76e7de9|63f54d63df61043f508e13fe|62617d7efb084326a3a00af1|6491dd450e56070df13b6fe2|66a821d737d2904499904a22|6719192326f15461d9669fb8|687f2acc803ea0e7e1826c0f|6074dd5577051e389faf8804|6858880e2a483c98dc1db79c|64d33e662e61c031517a90fd|669abdec28a8e2038bc0cf43|64d4915c8034d022d45eedcf|64d7c7cae5255c67b55186a9|64d47b1060dbf12d80842547|5f2ab7fde7272b4a336cc97b|684d5bbfa62193bf4c226126|64d49031b106ac6cdd1ab825|6665b8579dc40b34c60a122f|5edfa60b96564e4948214763)$'
+          - headers:
+              connectionid:
+                regex: '^(6019b8b367138f2039a7e655|60bfdc1ff260542c1e5b1401|61dda8d3ee406949313c8183|643663bf3dde262fecaff185|6626123c24f8a3e187391251|66c834c563363d804e66229f|678fd9859a819d32cc6167b1|6818c343759c6b8668023b99|689a918ebb100daf1f0e6f6a|68cab7f7c7fde5e26bbb0b71|5f1b7202116d2e48aca2807f|61e1dcbb6918e5563e6455a3|62018f60f5880f4cf5e55563|62fa7cd4efa1eb27add48be9|65b014767372b027c42136e0|65e995f023658d5e96381d74|664b79fdef87eb36ca86545f|66db0cc75b36727802df9e4d|67450d1e720b7a5ec720e1af|685a36a42a483c98dc9da617|687521fcb0e25c7cf319c63b|69126127578417f9fa4d1804|691e22259e7fe15bc3940be4)$'
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.527.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 125
+          maxReplicas: 415
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="http-adaptor-app"})
+                threshold: "90"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

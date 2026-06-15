@@ -1,0 +1,38 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "netsuite-distributed-adaptor",
+    "namespace": "argocd",
+    "finalizers": [
+      "resources-finalizer.argocd.argoproj.io"
+    ]
+  },
+  "spec": {
+    "project": "io",
+    "source": {
+      "helm": {
+        "valueFiles": [
+          "../../io/netsuite-distributed-adaptor/microservice.yaml",
+          "../../io/netsuite-distributed-adaptor/env.yaml"
+        ]
+      },
+      "path": "charts/microservice",
+      "repoURL": "https://github.com/celigo/cd.git",
+      "targetRevision": "platform2-dev"
+    },
+    "destination": {
+      "namespace": "io",
+      "server": "https://kubernetes.default.svc"
+    },
+    "syncPolicy": {
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "syncOptions": [
+        "CreateNamespace=true"
+      ]
+    }
+  }
+}

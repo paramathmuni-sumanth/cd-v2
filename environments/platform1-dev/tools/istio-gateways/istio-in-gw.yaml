@@ -1,0 +1,125 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.istio.io/v1alpha3","kind":"Gateway","metadata":{"annotations":{},"name":"istio-in-gw","namespace":"istio-gateway"},"spec":{"selector":{"app":"istio-ingress"},"servers":[{"hosts":["*.celigo.io","celigo.io"],"port":{"name":"http","number":80,"protocol":"HTTP"}}]}}
+  creationTimestamp: "2023-03-20T08:00:48Z"
+  generation: 13
+  name: istio-in-gw
+  namespace: istio-gateway
+  resourceVersion: "58302824"
+  uid: 935e7ccd-789c-4671-ba90-86357aea20a0
+spec:
+  selector:
+    app: istio-ingress
+  servers:
+  - hosts:
+    - '*.celigo.io'
+    - celigo.io
+    port:
+      name: http
+      number: 80
+      protocol: HTTP
+  - hosts:
+    - file-service.celigo.io
+    port:
+      name: file-service-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: file-service-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - file-service.celigo.io
+    port:
+      name: file-service-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - netsuite-distributed-adaptor.celigo.io
+    port:
+      name: netsuite-distributed-adaptor-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: netsuite-distributed-adaptor-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - netsuite-distributed-adaptor.celigo.io
+    port:
+      name: netsuite-distributed-adaptor-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - jdbc-bridge.celigo.io
+    port:
+      name: jdbc-bridge-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: jdbc-bridge-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - jdbc-bridge.celigo.io
+    port:
+      name: jdbc-bridge-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - nosql-db-adaptor.celigo.io
+    port:
+      name: nosql-db-adaptor-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: nosql-db-adaptor-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - nosql-db-adaptor.celigo.io
+    port:
+      name: nosql-db-adaptor-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - api-gateway.celigo.io
+    port:
+      name: api-gateway-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: api-gateway-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - api-gateway.celigo.io
+    port:
+      name: api-gateway-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - authentication-service.celigo.io
+    port:
+      name: authentication-service-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: authentication-service-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - authentication-service.celigo.io
+    port:
+      name: authentication-service-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false

@@ -1,0 +1,26 @@
+service: http-adaptor
+analysis:
+  source: splunk
+  query: >
+    search
+      earliest=-5m
+      index="ia-qa"
+      k8s.cluster.name=ia-qa-aws-eks-ap-south-1
+      k8s.namespace.name IN ("IO")
+      k8s.container.name=http-adaptor
+      k8s.pod.name=*canary*
+      (logName=onSendResponse OR logName=serverHit OR (level IN ("error","fatal") NOT logName=handleConcurrencyForUpdateDoc NOT DeprecationWarning NOT "enter AWS SDK for JavaScript" NOT "newrelic" NOT "logName=logging422Errors") OR *unhandled* OR *uncaught* OR *TypeError* OR *fatal* NOT logName=processProxyFatalError NOT wsId=*fatal* NOT logName=logging422Errors)
+      | eval fail=if(match(_raw, "(?i)unexpected|uncaught|unhandled|TypeError"), 1, 0),
+            fatal=if(level="fatal" OR match(_raw, "(?i)\bfatal\b"), 1, 0),
+            openConnection=if(logName="serverHit" AND oc > 180, 1, 0)
+      | stats sum(fail) as failCount,
+              sum(fatal) as fatalCount,
+              sum(openConnection) as openConnectionCount
+      | eval finalResultHolder=case(
+                fatalCount > 2 OR failCount > 2 OR openConnectionCount > 0, "false",
+                true(), "true"
+            )
+      | appendpipe [| stats count | where count==0 | eval failCount=0, fatalCount=0, openConnectionCount=0, finalResultHolder="true" | fields - count]
+      | fields failCount, fatalCount, openConnectionCount, finalResultHolder
+  frequency: 5m
+disabled: false

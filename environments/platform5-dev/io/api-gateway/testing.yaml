@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "api-gateway"
+    CUSTOM_URI: "http://api-gateway.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "api-gateway"
+    pullPolicy: Always
+    tag: ""

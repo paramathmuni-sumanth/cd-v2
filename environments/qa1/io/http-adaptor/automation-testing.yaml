@@ -1,0 +1,31 @@
+jobs:
+  - name: "HTTP_Azure"
+    env:
+      TAG: "@Zephyr-IO-T26909|@Zephyr-IO-T26910|@Zephyr-IO-T26912|@Zephyr-IO-T26913|@Zephyr-IO-T26914|@Zephyr-IO-T26915|@Zephyr-IO-T26919|@Zephyr-IO-T26920|@Zephyr-IO-T26921|@Zephyr-IO-T26922|@Zephyr-IO-T26924|@Zephyr-IO-T26926|@Zephyr-IO-T26928|@Zephyr-IO-T26931|@Zephyr-IO-T43120"
+  - name: "HTTP"
+    env:
+      TAG: "@Zephyr-IO-T24766|@Zephyr-IO-T24767|@Zephyr-IO-T24782|@Zephyr-IO-T24783|@Zephyr-IO-T24800|@Zephyr-IO-T24804|@Zephyr-IO-T24805|@Zephyr-IO-T24806|@Zephyr-IO-T32367|@Zephyr-IO-T32368|@Zephyr-IO-T32369|@Zephyr-IO-T926"
+  - name: "HTTP_Export_HandleBar"
+    env:
+      TAG: "@Zephyr-IO-T51691|@Zephyr-IO-T51692|@Zephyr-IO-T51693|@Zephyr-IO-T51694|@Zephyr-IO-T51695|@Zephyr-IO-T51696|@Zephyr-IO-T51697|@Zephyr-IO-T51698|@Zephyr-IO-T51699|@Zephyr-IO-T51700|@Zephyr-IO-T51701|@Zephyr-IO-T51702|@Zephyr-IO-T51703|@Zephyr-IO-T51704|@Zephyr-IO-T51705|@Zephyr-IO-T51706|@Zephyr-IO-T51707"
+  - name: "HTTP_Export_Lookup_HandleBars"
+    env:
+      TAG: "@Zephyr-IO-T51931|@Zephyr-IO-T51932|@Zephyr-IO-T51933|@Zephyr-IO-T51934|@Zephyr-IO-T51935|@Zephyr-IO-T51936|@Zephyr-IO-T51937|@Zephyr-IO-T51938|@Zephyr-IO-T51939|@Zephyr-IO-T51940|@Zephyr-IO-T51941|@Zephyr-IO-T51942|@Zephyr-IO-T51943|@Zephyr-IO-T51944|@Zephyr-IO-T51945|@Zephyr-IO-T51946"
+  - name: "HTTP5"
+    env:
+      TAG: "@Zephyr-IO-T46560|@Zephyr-IO-T46561|@Zephyr-IO-T46562|@Zephyr-IO-T46563|@Zephyr-IO-T46564|@Zephyr-IO-T46565|@Zephyr-IO-T46566|@Zephyr-IO-T46567|@Zephyr-IO-T46568|@Zephyr-IO-T46569|@Zephyr-IO-T46570|@Zephyr-IO-T46571|@Zephyr-IO-T46572|@Zephyr-IO-T46573|@Zephyr-IO-T46574|@Zephyr-IO-T46575"
+  - name: "AmazonSP"
+    env:
+      TAG: "@Zephyr-IO-T22106|@Zephyr-IO-T39271|@Zephyr-IO-T39272|@Zephyr-IO-T39273"
+  - name: "HTTP_2"
+    env:
+      TAG: "@Zephyr-IO-T14590|@Zephyr-IO-T14671|@Zephyr-IO-T24801|@Zephyr-IO-T926"
+  - name: "HTTP6"
+    env:
+      TAG: "@Zephyr-IO-T26389|@Zephyr-IO-T26390|@Zephyr-IO-T26391|@Zephyr-IO-T41515"
+  - name: "HTTP4"
+    env:
+      TAG: "@Zephyr-IO-T27334|@Zephyr-IO-T27508|@Zephyr-IO-T27510|@Zephyr-IO-T27512|@Zephyr-IO-T40494|@Zephyr-IO-T40497|@Zephyr-IO-T40498|@Zephyr-IO-T40499|@Zephyr-IO-T40500|@Zephyr-IO-T40501|@Zephyr-IO-T40502|@Zephyr-IO-T40503|@Zephyr-T27335"
+  - name: "HTTP_BODY_PARAMS"
+    env:
+      TAG: "@Zephyr-IO-T39623|@Zephyr-IO-T39624|@Zephyr-IO-T39625|@Zephyr-IO-T39626|@Zephyr-IO-T39627|@Zephyr-IO-T39629|@Zephyr-IO-T39632|@Zephyr-IO-T39634|@Zephyr-IO-T39636|@Zephyr-IO-T39639"

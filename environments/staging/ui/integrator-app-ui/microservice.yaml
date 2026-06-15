@@ -1,0 +1,332 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notNamespaces:
+                  - "istio-ingress"
+                  - "monitoring"
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "integrator-app-ui"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 500m
+          memory: 450Mi
+        requests:
+          cpu: 100m
+          memory: 250Mi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2025-11-02-23-00
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::609704034070:role/integrator-app-ui-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - '*'
+    gateways:
+      - istio-gateway/istio-in-gw-integ
+    http:
+      - match:
+          - uri:
+              exact: /classifications/errors
+        route:
+          - destination:
+              host: error-classifier-v2.io.svc.cluster.local
+      - match:
+          - method:
+              exact: POST
+            uri:
+              exact: /receive
+          - method:
+              exact: POST
+            uri:
+              exact: /as2-exports
+        route:
+          - destination:
+              host: as2-mock.io.svc.cluster.local
+      - match:
+          - method:
+              exact: POST
+            uri:
+              prefix: /function
+        route:
+          - destination:
+              host: aut-connectormockserver.io.svc.cluster.local
+      - match:
+          - uri:
+              prefix: /api/celigo-agent/
+          - uri:
+              regex: '/api/[^/]+/[^/]+/unsetDraft'
+        route:
+          - destination:
+              host: api-gateway.io.svc.cluster.local
+              subset: celigo-agent-app
+      - match:
+          - method:
+              exact: POST
+            uri:
+              exact: /request-email-verification
+          - method:
+              exact: POST
+            uri:
+              exact: /verify-user
+          - method:
+              exact: GET
+            uri:
+              exact: /account-suggestions
+          - method:
+              exact: POST
+            uri:
+              regex: '^/(i|e)[a-zA-Z0-9]{9}$'
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /oidc
+          - method:
+              exact: GET
+            uri:
+              prefix: /.well-known/oauth-authorization-server
+          - method:
+              exact: GET
+            uri:
+              exact: /.well-known/openid-configuration
+          - method:
+              exact: GET
+            uri:
+              prefix: /.well-known/oauth-protected-resource
+          - method:
+              exact: GET
+            uri:
+              prefix: /netSuiteWS/
+          - method:
+              exact: PUT
+            uri:
+              exact: /netsuiteDA/previewImportMappingFields
+          - method:
+              exact: GET
+            uri:
+              exact: /publishedHttpConnectors
+          - method:
+              exact: GET
+            uri:
+              prefix: /region/redirect/
+          - method:
+              exact: GET
+            uri:
+              exact: /celigouniversity/sso
+          - method:
+              regex: "^(GET|PUT)$"
+            uri:
+              regex: '/exports/[^/]+/distributed'
+          - method:
+              regex: "^(GET|PUT)$"
+            uri:
+              regex: '/imports/[^/]+/distributed'
+          - method:
+              exact: GET
+            uri:
+              exact: /litmos/sso
+          - method:
+              exact: GET
+            uri:
+              prefix: /zendesk/
+          - method:
+              exact: GET
+            uri:
+              regex: '/token-status/[^/]+'
+          - method:
+              exact: POST
+            uri:
+              prefix: /signin
+          - method:
+              exact: GET
+            uri:
+              regex: '/signin/errors/[^/]+'
+          - method:
+              exact: GET
+            uri:
+              prefix: /csrf
+          - method:
+              exact: POST
+            uri:
+              prefix: /mfa/verify
+          - method:
+              exact: POST
+            uri:
+              prefix: /signout
+          - method:
+              exact: GET
+            uri:
+              prefix: /auth/google/oauth2callback
+          - method:
+              exact: POST
+            uri:
+              prefix: /auth/google
+          - method:
+              regex: "^(GET|POST)$"
+            uri:
+              prefix: /sso
+          - method:
+              regex: "^(GET|POST)$"
+            uri:
+              exact: /reSigninWithGoogle
+          - method:
+              exact: POST
+            uri:
+              exact: /request-reset
+          - method:
+              exact: POST
+            uri:
+              exact: /signup
+          - method:
+              exact: POST
+            uri:
+              exact: /set-initial-password
+          - method:
+              exact: POST
+            uri:
+              exact: /accept-invite
+          - method:
+              exact: POST
+            uri:
+              exact: /accept-invite-metadata
+          - method:
+              exact: POST
+            uri:
+              exact: /reset-password
+          - method:
+              exact: POST
+            uri:
+              exact: /change-email
+          - method:
+              regex: "^(GET|POST)$"
+            uri:
+              prefix: /reSigninWithSSO
+          - method:
+              exact: POST
+            uri:
+              exact: /link/google
+          - method:
+              exact: POST
+            uri:
+              exact: /unlink/google
+          - method:
+              exact: GET
+            uri:
+              exact: /status
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /api/
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /v1/
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /system/v1
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /netsuite/v1
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /apis/
+          - method:
+              regex: "^(GET|PUT)$"
+            uri:
+              regex: '/connections/[^/]+/distributed'
+          - method:
+              exact: PUT
+            uri:
+              regex: '/connections/[^/]+/mappingPreview'
+          - method:
+              exact: GET
+            uri:
+              prefix: /connection/
+          - method:
+              exact: GET
+            uri:
+              prefix: /app/shopify/verify
+          - authority:
+              exact: api.staging.integrator.io
+        route:
+          - destination:
+              host: api-gateway.io.svc.cluster.local
+              subset: app
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-app-ui
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-2.0.3.136.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

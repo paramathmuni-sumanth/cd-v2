@@ -1,0 +1,81 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 860378520032.dkr.ecr.us-east-1.amazonaws.com
+      name: di-error-management
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      livenessProbe:
+        initialDelaySeconds: 50
+      readinessProbe:
+        initialDelaySeconds: 50
+      resources:
+        limits:
+          cpu: 1500m
+          memory: 1.5Gi
+        requests:
+          cpu: 750m
+          memory: 750Mi
+      terminationGracePeriodSeconds: 300
+    hpa:
+      autoscaling:
+        enabled: false
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/di-error-management-s3-role-k8s-production-na
+  virtualService:
+    enabled: true
+    hosts:
+      - di-error-management.di.svc.cluster.local
+      - di-error-management.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - di-error-management
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: 2026.5.2-patch-fb-1.0.0.30.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

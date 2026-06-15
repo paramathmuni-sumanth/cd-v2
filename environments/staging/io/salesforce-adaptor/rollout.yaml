@@ -1,0 +1,32 @@
+service: salesforce-adaptor
+analysis:
+  source: splunk
+  query: >
+    search
+    earliest=-5m
+    index=staging-adaptors
+    k8s.cluster.name=staging-aws-eks-us-east-1
+    k8s.namespace.name IN ("IO")
+    k8s.container.name=salesforce-adaptor
+    k8s.pod.name=*canary*
+    (level IN ("error", "fatal") OR *unhandled* OR *uncaught* OR *TypeError* OR *fatal*) NOT new_relic_response NOT logName=redisClientError NOT wsId=*fatal* NOT logName=onSendResponse NOT logName=serverHit
+    | eval fail=if(match(_raw, "(?i)fatal|unexpected|typeerror|uncaught|unhandled"), 1, 0),
+           fatal=if(level="fatal", 1, 0)
+    | stats sum(fail) as failCount, 
+            sum(fatal) as fatalCount
+    | eval finalResultHolder=case(
+               fatalCount > 2 OR failCount > 2, "false",
+               true(), "true"
+           )
+    | appendpipe [| stats count | where count==0 | eval failCount=0, fatalCount=0, finalResultHolder="true" | fields - count]           
+    | fields failCount, fatalCount, finalResultHolder
+
+  frequency: 5m
+disabled: true
+versions:
+    - version: v2
+      isPromotable: true
+      lastApplied: 2021-09-01 12:00:00
+      stages:
+        - wait: 10m
+          groups: ['Staging User Accounts']

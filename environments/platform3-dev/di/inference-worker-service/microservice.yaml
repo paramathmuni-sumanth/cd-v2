@@ -1,0 +1,146 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/io/sa/api-gateway
+                  - cluster.local/ns/di/sa/di-management-service
+                  - cluster.local/ns/di/sa/schema-inference-service
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: inference-worker-service
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 4000m
+          memory: 8Gi
+        requests:
+          cpu: 1000m
+          memory: 4Gi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2025-11-28-16-50
+      livenessProbe:
+        enabled: true
+        config:
+          httpGet:
+            path: /actuator/health/liveness
+        initialDelaySeconds: 60
+      readinessProbe:
+        enabled: true
+        path: /actuator/health/readiness
+        initialDelaySeconds: 60
+    hpa:
+      autoscaling:
+        enabled: false
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::620736318138:role/inference-worker-service-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - inference-worker-service.di.svc.cluster.local
+      - inference-worker-service.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - inference-worker-service
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.67.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 20
+          pollingInterval: 15
+          cooldownPeriod: 300
+          triggerAuthentication:
+            podIdentity:
+              provider: aws
+              identityOwner: keda
+          triggers:
+            - type: aws-sqs-queue
+              authenticationRef:
+                name: inference-worker-service-app-trigger-auth
+              metadata:
+                queueURL: https://sqs.ap-south-1.amazonaws.com/620736318138/platform3-schema-inference-jobs
+                awsRegion: ap-south-1
+                queueLength: "30"
+                scaleOnInFlight: "true"
+            - type: aws-cloudwatch
+              authenticationRef:
+                name: inference-worker-service-app-trigger-auth
+              metadata:
+                namespace: AWS/SQS
+                dimensionName: QueueName
+                dimensionValue: platform3-schema-inference-jobs
+                metricName: ApproximateAgeOfOldestMessage
+                targetMetricValue: "120"
+                minMetricValue: "0"
+                metricStatPeriod: "60"
+                metricStat: Average
+                awsRegion: ap-south-1
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleUp:
+              stabilizationWindowSeconds: 60
+              policies:
+                - type: Pods
+                  value: 4
+                  periodSeconds: 60
+              selectPolicy: Max
+            scaleDown:
+              stabilizationWindowSeconds: 300
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

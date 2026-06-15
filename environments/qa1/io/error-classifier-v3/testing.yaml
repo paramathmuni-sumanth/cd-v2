@@ -1,0 +1,16 @@
+testing:
+  env:
+    SERVICE: "error-classifier-v3"
+    CUSTOM_URI: "http://error-classifier-v3.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "error-classifier-v3"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

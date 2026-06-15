@@ -1,0 +1,91 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/io/sa/rdbms-adaptor
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "jdbc-bridge"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 0
+      containerPort: 8080
+      resources:
+        limits:
+          cpu: 1500m
+          memory: 1000Mi
+        requests:
+          cpu: 500m
+          memory: 700Mi
+      terminationGracePeriodSeconds: 300
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - 'echo prestop stage ; sleep 300 ; catalina.sh stop'
+      podAnnotations:
+        redeployTimestamp: 2024-05-09-11-00
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::776457608093:role/jdbc-bridge-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - jdbc-bridge.celigo.io
+      - jdbc-bridge.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - jdbc-bridge
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: workday-fb-1.0.0.97.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

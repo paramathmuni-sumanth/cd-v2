@@ -1,0 +1,38 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "integrator-workers",
+    "namespace": "argocd",
+    "finalizers": [
+      "resources-finalizer.argocd.argoproj.io"
+    ]
+  },
+  "spec": {
+    "project": "io",
+    "source": {
+      "helm": {
+        "valueFiles": [
+          "../../io/integrator-workers/microservice.yaml",
+          "../../io/integrator-workers/env.yaml"
+        ]
+      },
+      "path": "charts/microservice",
+      "repoURL": "https://github.com/celigo/cd-staging.git",
+      "targetRevision": "staging"
+    },
+    "destination": {
+      "namespace": "io",
+      "server": "https://kubernetes.default.svc"
+    },
+    "syncPolicy": {
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "syncOptions": [
+        "CreateNamespace=true"
+      ]
+    }
+  }
+}

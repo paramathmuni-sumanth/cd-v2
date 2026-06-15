@@ -1,0 +1,38 @@
+{
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+        "name": "ai-agents-celigo",
+        "namespace": "argocd",
+        "finalizers": [
+            "resources-finalizer.argocd.argoproj.io"
+        ]
+    },
+    "spec": {
+        "project": "internal",
+        "source": {
+            "helm": {
+                "valueFiles": [
+                    "../../internal/ai-agents-celigo/microservice.yaml",
+                    "../../internal/ai-agents-celigo/env.yaml"
+                ]
+            },
+            "path": "charts/microservice",
+            "repoURL": "https://github.com/celigo/cd.git",
+            "targetRevision": "qa1"
+        },
+        "destination": {
+            "namespace": "internal",
+            "server": "https://kubernetes.default.svc"
+        },
+        "syncPolicy": {
+            "automated": {
+                "prune": true,
+                "selfHeal": true
+            },
+            "syncOptions": [
+                "CreateNamespace=true"
+            ]
+        }
+    }
+}

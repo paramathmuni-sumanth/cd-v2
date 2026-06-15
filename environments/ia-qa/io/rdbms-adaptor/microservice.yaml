@@ -1,0 +1,116 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/core/sa/api-execution
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "rdbms-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2300m
+          memory: 1000Mi
+        requests:
+          cpu: 390m
+          memory: 500Mi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2026-02-24-18-28
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::027986264538:role/rdbms-adaptor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - rdbms-adaptor.celigo.io
+      - rdbms-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - rdbms-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  PersistentVolumeClaims:
+    - name: rdbms-adaptor-fs-021b2a2b25323b82d
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-ws-sc
+  volumes:
+    - name: rdbms-adaptor-nfs-storage
+      persistentVolumeClaim:
+        claimName: rdbms-adaptor-fs-021b2a2b25323b82d
+  volumeMounts:
+    - mountPath: "/rdbms-adaptor/bulk_load_files/"
+      name: rdbms-adaptor-nfs-storage
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.7.5.243.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

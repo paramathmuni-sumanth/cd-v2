@@ -1,0 +1,86 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/api-gateway
+                  - cluster.local/ns/di/sa/di-management-service
+                  - cluster.local/ns/io/sa/js-runtime
+                  - cluster.local/ns/io/sa/salesforce-adaptor
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/internal-gateway
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: flow-management
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1.5
+          memory: 1536Mi
+        requests:
+          cpu: 1
+          memory: 1Gi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2025-04-14-14-55
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::380555188672:role/flow-management-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - flow-management.io.svc.cluster.local
+      - flow-management.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - flow-management
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-2.0.0.911.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

@@ -1,0 +1,270 @@
+infra-tasks:
+  global:
+    image:
+      pullPolicy: Always
+    secrets: false
+    configmap:
+      name: global-configmap
+      env:
+        GIT_ORG: celigo
+        ENVIRONMENT_VARIABLES_S3_BUCKET_NAME: celigo-k8s-qa-prod-env-vars
+        ENVIRONMENT: qaprod
+        NODE_ENV: cd
+        IO_DOMAIN: qaprod.staging.integrator.io
+        NODE_OPTIONS: --max-old-space-size=2048
+    resources:
+      limits:
+        memory: 3000Mi
+      requests:
+        cpu: 1000m
+        memory: 2500Mi
+    serviceAccount:
+      name: loadtesting
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/http-ms-loadtesting-s3-role-k8s
+  jobs:
+  - name: http-adaptor-loadtesting
+    template: false
+    jobType: cronJob
+    schedule: 0 0 1 1 *
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    image: http-ms-loadtesting
+    pullPolicy: Always
+    tag: loadtest-k6-dev-0.0.2.256.0
+    env:
+      MS: http-adaptor
+      CUSTOM_URI: ws://http-adaptor.io.svc.cluster.local
+      LOAD_TEST_RESULTS_S3_BUCKET: celigo-k8s-qa-prod-load-test-results
+      DURATION: 3s
+      VUS: '2'
+      MODE: load
+      ERP_LOGGING: ''
+      NO_OF_PODS: '10'
+      TAG: connPoolTest-isolation-verification.js
+      TEST_TYPE: ''
+      RPS: ''
+      RPM: ''
+      RELEASE: 2026.6.1
+      PERSIST_METRICS: 'false'
+  - name: ns-distributed-adaptor-loadtesting
+    template: false
+    jobType: cronJob
+    schedule: 0 0 1 1 *
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    image: http-ms-loadtesting
+    pullPolicy: Always
+    tag: loadtest-k6-dev-0.0.2.265.0
+    env:
+      MS: netsuite-distributed-adaptor
+      CUSTOM_URI: ws://netsuite-distributed-adaptor.io.svc.cluster.local
+      LOAD_TEST_RESULTS_S3_BUCKET: celigo-k8s-qa-prod-load-test-results
+      DURATION: 300s
+      VUS: '1'
+      MODE: load
+      TAG: ERP_processLookups_4k-max
+      NO_OF_PODS: '1'
+      ERP_LOGGING: ''
+      INCLUDE_DETAILED_RESULTS: 'true'
+      TEST_TYPE: ''
+      RPS: ''
+      RPM: ''
+      RELEASE: 2026.test.1
+      PERSIST_METRICS: 'true'
+  - name: ns-webservices-adaptor-loadtesting
+    template: false
+    jobType: cronJob
+    schedule: 0 0 1 1 *
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    image: http-ms-loadtesting
+    pullPolicy: Always
+    tag: loadtest-k6-dev-0.0.2.213.0
+    env:
+      MS: netsuite-webservices-adaptor
+      CUSTOM_URI: ws://netsuite-webservices-adaptor.io.svc.cluster.local
+      LOAD_TEST_RESULTS_S3_BUCKET: celigo-k8s-qa-prod-load-test-results
+      DURATION: 300s
+      VUS: '1'
+      MODE: load
+      TAG: ResiliencyERP
+      NO_OF_PODS: '1'
+      ERP_LOGGING: ''
+      TEST_TYPE: ''
+      RPS: ''
+      RPM: ''
+  - name: salesforce-adaptor-loadtesting
+    template: false
+    jobType: cronJob
+    schedule: 0 0 1 1 *
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    image: http-ms-loadtesting
+    pullPolicy: Always
+    tag: loadtest-k6-dev-0.0.2.230.0
+    env:
+      MS: salesforce-adaptor
+      CUSTOM_URI: ws://salesforce-adaptor.io.svc.cluster.local
+      LOAD_TEST_RESULTS_S3_BUCKET: celigo-k8s-qa-prod-load-test-results
+      TAG: max
+      DURATION: 3s
+      VUS: '1'
+      MODE: load
+      NO_OF_PODS: '10'
+      TEST_TYPE: ''
+      RPS: ''
+      RPM: ''
+      ERP_LOGGING: ''
+  - name: file-adaptor-loadtesting
+    template: false
+    jobType: cronJob
+    schedule: 0 0 1 1 *
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    image: http-ms-loadtesting
+    pullPolicy: Always
+    tag: loadtest-k6-dev-0.0.2.278.0
+    env:
+      MS: file-adaptor
+      CUSTOM_URI: ws://file-adaptor.io.svc.cluster.local
+      LOAD_TEST_RESULTS_S3_BUCKET: celigo-k8s-qa-prod-load-test-results
+      TAG: getNextPage
+      DURATION: 30m
+      VUS: '1'
+      MODE: ''
+      NO_OF_PODS: '4'
+      ERP_LOGGING: ''
+      TEST_TYPE: ''
+      RPS: ''
+      RPM: ''
+      RELEASE: 2026.7.1
+      PERSIST_METRICS: 'false'
+  - name: mcp-server-loadtesting
+    template: false
+    jobType: cronJob
+    schedule: 0 0 1 1 *
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    image: http-ms-loadtesting
+    pullPolicy: Always
+    tag: loadtest-k6-dev-0.0.2.230.0
+    env:
+      MS: mcp-server
+      CUSTOM_URI: ws://mcp-server.io.svc.cluster.local
+      BASE_URI: https://api.qaprod.staging.integrator.io
+      LOAD_TEST_RESULTS_S3_BUCKET: celigo-k8s-qa-prod-load-test-results
+      TAG: endurance
+      MODE: basic
+      NO_OF_PODS: '1'
+      ERP_LOGGING: ''
+      TEST_TYPE: http
+      DURATION: 30s
+      VUS: '1'
+      RPS: ''
+      RPM: ''
+  - name: ai-agent-executor-loadtesting
+    template: false
+    jobType: cronJob
+    schedule: 0 0 1 1 *
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    image: http-ms-loadtesting
+    pullPolicy: Always
+    tag: loadtest-k6-dev-0.0.2.229.0
+    env:
+      MS: ai-agent-executor
+      CUSTOM_URI: ws://ai-agent-executor.io.svc.cluster.local
+      BASE_URI: http://ai-agent-executor.io.svc.cluster.local
+      LOAD_TEST_RESULTS_S3_BUCKET: celigo-k8s-qa-prod-load-test-results
+      TAG: mixed-openai-gemini
+      MODE: load
+      NO_OF_PODS: '1'
+      ERP_LOGGING: ''
+      TEST_TYPE: http
+      DURATION: 180s
+      VUS: '1'
+      RPS: '50'
+      RPM: '2'
+  - name: nosql-db-adaptor-loadtesting
+    template: false
+    jobType: cronJob
+    schedule: 0 0 1 1 *
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    image: http-ms-loadtesting
+    pullPolicy: Always
+    tag: loadtest-k6-dev-0.0.2.267.0
+    env:
+      MS: nosql-db-adaptor
+      CUSTOM_URI: ws://nosql-db-adaptor.io.svc.cluster.local
+      LOAD_TEST_RESULTS_S3_BUCKET: celigo-k8s-qa-prod-load-test-results
+      DURATION: 300s
+      VUS: '500'
+      MODE: load
+      TAG: getNextPage-nosql-mongodb-trial
+      NO_OF_PODS: '5'
+      ERP_LOGGING: ''
+      INCLUDE_DETAILED_RESULTS: 'true'
+      TEST_TYPE: ''
+      RPS: ''
+      RPM: ''
+      RELEASE: 2026.5.1
+      PERSIST_METRICS: 'false'
+  - name: data-warehouse-adaptor-loadtesting
+    template: false
+    jobType: cronJob
+    schedule: 0 0 1 1 *
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    image: http-ms-loadtesting
+    pullPolicy: Always
+    tag: loadtest-k6-dev-0.0.2.245.0
+    env:
+      MS: data-warehouse-adaptor
+      CUSTOM_URI: ws://data-warehouse-adaptor.io.svc.cluster.local
+      LOAD_TEST_RESULTS_S3_BUCKET: celigo-k8s-qa-prod-load-test-results
+      TAG: processImportPage-dwh-snowflake-with-wsid
+      DURATION: 600s
+      VUS: '12'
+      MODE: RAMP_UP=30s
+      NO_OF_PODS: '1'
+      ERP_LOGGING: ''
+      TEST_TYPE: adaptor-loadtest
+      RPS: ''
+      RPM: ''
+  - name: file-service-loadtesting
+    template: false
+    jobType: cronJob
+    schedule: 0 0 1 1 *
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    image: http-ms-loadtesting
+    pullPolicy: Always
+    tag: loadtest-k6-dev-0.0.2.242.0
+    env:
+      MS: file-service
+      BASE_URI: http://file-service.io.svc.cluster.local
+      LOAD_TEST_RESULTS_S3_BUCKET: celigo-k8s-qa-prod-load-test-results
+      FILE_SERVICE_LOADTEST_S3_BUCKET: integrator-qa-prod-userdata-delete-30
+      TAG: e2e-stepped
+      MODE: '"FILE_SERVICE_LOADTEST_S3_BUCKET=integrator-qa-prod-userdata-delete-30;FILE_SERVICE_SMIME_USER_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCE4n3i5y4i0AXo\nuhIfHMLVoFH///9u1PzWifEkHeIX6ALLtgPh1DCITUgnU3Q/HPnJ3H87NE+ZI51r\n8YGVSWCPIfufx99rnjxyuejOGcRKLY5FM7+g5z51Q39YWaPDoaj4Ufp5Zh46Lv0F\nJFNoWRdTSRBVQisgaYgJlS9Pxvg4K/R7if3A5hB0hUPtpUWeOP1M/0Dkk3TYuKr1\niT7gzmzk/G6ZTPUjUF5aPVDzkqrR5sY+wTXh4Q/wdvYO++lXkPMpar9ecTqikhcy\n/cEXJ4TVxW09MBtmDikMfpVSS0OFmGmRwCp5Jv8ZViMvPKqFbsjvHdwTx5/zq+jU\nH7CEJfdbAgMBAAECggEAbnFkGWL0uGBWmO+VQiCAWlbN8EwPO0lv/stVDSR9Fktx\nj2fu4BGgaJh6oJy+3/mwLbLCWC2I/olYPC/T+ISs6SlgXZMcQPCZ4uxa7nkB6Hjm\nZuO0oAGxqnp367FM57qDmidgWuehtc/54P0pCXAKb+Eo3wOInn63XueME+0VvnCg\nUCfZ8MscykfYgXsv9I4nD1qpJ0VzvFI07IKBvv4S5CuODoRqOfZNG4tKh6zj14Dq\nFc+9vKQkdzI7fbKGEAcU0a9DDTyjQI7KeCb2zU+1UEQIP2Q5uE6J0DgpyiZHbIGK\nN+VHvgfGXlf5Wco9wul/oToBoHPJkpgk2zF3/uyQ8QKBgQD7t6zAmgddbRJM/vO7\nd02V5iaZcYHOchCEpwXd0Nbko5oyH4BhqJwKLG0G8aBZoSk7u40dONaOump2YWiz\np6imS5mXobOrnCy1epEgskmdkm18f4ngvte/gLZiuBCfiWCp1gk3OV94ElR861X/\nIF/ga34ZEohYZpDTROCULDBQ0wKBgQCHJUFVJ+/B3p4tOW7fuYYPsubYcRjKBdRP\nFthmRuVPqs45qjX2sCxFPktcYmt7vw9SVezfA5S0lZmB2rtX7Zysr1M0ChClc7wa\nwuJiHmc30KxYB2v5GwbboNtItGhE98plrkQNjGZYZh38mpkDy3t+IMbsE0iV0TMY\nECK46QPqWQKBgGlYwbAJxrNPBq26tf7rO0lU/SqS2qSwEEG0NTxUPtuJrOr1TCGT\nE1sepLKXRWi9jig1oiVsuD8bvZq1wcAOlwKh+TIAttVHk16QYVSxySVtNu0341hw\nBpNbJvnB1xMtx4rMzSaTmGUEJt/xDhisT/P4iNmta+qzYkFJPkRFCiOJAoGAa6v8\n71GQLY+lyjY15b0z2BIa5VrF+z7FtfVnl6ToUZ6uCzdXIyGdQ9WryQEIzWCdXmXj\nAJMjyPRfhxuzowxGhTZyPcW/GXKp7VBTeQTsC4YPqVrQZXlo71arHrPNVxVshbJf\nucOgTtGdFoI9Ys6dpxGKKs/6RpKT+JnycAwF+JECgYApehjDzPjtlo+mM2S0f0ZB\nFCgAmlv8HO7jMig03E8L0XxJCyIiO4JERIBrgmWz7H2CWbRpKTSjslugENIRL/R1\n/PaeSTCiNqqzFdVVJ+m4CBHtLnIDkFJ4y8dnbEFrFhysKxWauy+nInLGz6SGFWtR\n61JJ9hdS/LQubKTHvwP/Zg==\n-----END PRIVATE KEY-----\n"'
+      TEST_TYPE: adaptor-rest-loadtest
+      VUS: '20'
+      ITERATIONS: '10'
+      NO_OF_PODS: '1'
+      ERP_LOGGING: ''
+      DURATION: 20s
+  - name: resource-management-loadtesting
+    template: false
+    jobType: cronJob
+    schedule: 0 0 1 1 *
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    image: http-ms-loadtesting
+    pullPolicy: Always
+    tag: loadtest-k6-dev-0.0.2.279.0
+    env:
+      MS: resource-management
+      CUSTOM_URI: ws://resource-management.core.svc.cluster.local
+      LOAD_TEST_RESULTS_S3_BUCKET: celigo-k8s-qa-prod-load-test-results
+      TAG: 'rms-api-only-baseline '
+      DURATION: 1200s
+      VUS: '5'
+      MODE: load
+      NO_OF_PODS: '1'
+      ERP_LOGGING: ''
+      TEST_TYPE: http
+      RPS: '20'
+      RPM: '100'
+      RELEASE: 2026.6.1
+      PERSIST_METRICS: 'false'

@@ -1,0 +1,77 @@
+pod-recycle:
+  global:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: dump-export-service
+      pullPolicy: Always
+    resources:
+      requests:
+        cpu: 500m
+        memory: 500Mi
+  jobs:
+    - name: dump-export-http-adaptor #follow micro-services naming convention
+      template: false #keep this as false for jobs[i] where i>1;
+      jobType: cronJob
+      schedule: "*/5 * * * *"
+      tag: ml-0.0.1.6.0
+      namespace: io
+      serviceAccount:
+        annotations:
+          eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/dump-export-service-s3-role-k8s
+      env:
+        DUMP_FOLDER: "/service-core-dumps/"
+        DUMP_FILE_BUCKET: "integrator-qa-prod-heap-dumps"
+        TIME_GAP: "60"
+        DUMP_FILE_BUCKET_PREFIX: "dump-files"
+        NODE_ENV: "staging"
+      volumes:
+        - name: dump-exporter-http-adaptor-nfs-storage
+          persistentVolumeClaim:
+            claimName: http-adaptor-nfs-pvc-fs-03926db75e0d38bd2
+      volumeMounts:
+        - mountPath: "/service-core-dumps/"
+          name: dump-exporter-http-adaptor-nfs-storage
+    - name: dump-export-data-warehouse-adaptor #follow micro-services naming convention
+      template: false #keep this as false for jobs[i] where i>1;
+      jobType: cronJob
+      schedule: "*/5 * * * *"
+      tag: ml-0.0.1.5.0
+      namespace: io
+      serviceAccount:
+        annotations:
+          eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/dump-export-service-s3-role-k8s
+      env:
+        DUMP_FOLDER: "/service-core-dumps/"
+        DUMP_FILE_BUCKET: "integrator-qa-prod-heap-dumps"
+        TIME_GAP: "60"
+        DUMP_FILE_BUCKET_PREFIX: "dump-files"
+        NODE_ENV: "staging"
+      volumes:
+        - name: dump-exporter-data-warehouse-adaptor-nfs-storage
+          persistentVolumeClaim:
+            claimName: data-warehouse-adaptor-fs-03926db75e0d38bd2
+      volumeMounts:
+        - mountPath: "/service-core-dumps/"
+          name: dump-exporter-data-warehouse-adaptor-nfs-storage
+    - name: dump-export-nosql-db-adaptor #follow micro-services naming convention
+      template: false #keep this as false for jobs[i] where i>1;
+      jobType: cronJob
+      schedule: "*/5 * * * *"
+      tag: ml-0.0.1.5.0
+      namespace: io
+      serviceAccount:
+        annotations:
+          eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/dump-export-service-s3-role-k8s
+      env:
+        DUMP_FOLDER: "/service-core-dumps/"
+        DUMP_FILE_BUCKET: "integrator-qa-prod-heap-dumps"
+        TIME_GAP: "60"
+        DUMP_FILE_BUCKET_PREFIX: "dump-files"
+        NODE_ENV: "staging"
+      volumes:
+        - name: dump-exporter-nosql-db-adaptor-nfs-storage
+          persistentVolumeClaim:
+            claimName: nosql-db-adaptor-fs-03926db75e0d38bd2
+      volumeMounts:
+        - mountPath: "/service-core-dumps/"
+          name: dump-exporter-nosql-db-adaptor-nfs-storage

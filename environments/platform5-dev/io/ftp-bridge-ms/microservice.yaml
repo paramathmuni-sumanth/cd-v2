@@ -1,0 +1,96 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/io/sa/endpoint-service
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: ftp-bridge-ms
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 8080
+      resources:
+        limits:
+          cpu: 2824m
+          memory: 2824Mi
+        requests:
+          cpu: 2312m
+          memory: 2312Mi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2024-05-09-11-00
+      livenessProbe:
+        enabled: true
+        config:
+          httpGet:
+            path: /ftp-bridge-ms/livez
+      readinessProbe:
+        enabled: true
+        path: "/ftp-bridge-ms/readyz"
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:8080/ftp-bridge-ms/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in seq 1 5; do count=$(wget -qO- 'http://localhost:8080/ftp-bridge-ms/openConnections?terminate=true'); sleep 5; done; fi; done; catalina.sh stop;
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::380555188672:role/ftp-bridge-ms-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - ftp-bridge-ms.io.svc.cluster.local
+      - ftp-bridge-ms.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - ftp-bridge-ms
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.1.88.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

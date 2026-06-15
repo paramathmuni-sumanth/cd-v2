@@ -1,0 +1,103 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/io/sa/ai-agent-adaptor
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /metrics
+  common:
+    image:
+      repository: 860378520032.dkr.ecr.us-east-1.amazonaws.com
+      name: ai-agent-executor
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1600m
+          memory: 4Gi
+        requests:
+          cpu: 800m
+          memory: 2.5Gi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2026-06-09-16-40
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::609704034070:role/ai-agent-executor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - ai-agent-executor.io.svc.cluster.local
+      - ai-agent-executor.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - ai-agent-executor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.1.0.33.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

@@ -1,0 +1,25 @@
+{
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+        "name": "identify-unhealthy-target",
+        "namespace": "argocd"
+    },
+    "spec": {
+        "destination": {
+            "server": "https://kubernetes.default.svc"
+        },
+        "project": "foundationlayer",
+        "source": {
+            "path": "tools/identify_unhealthy_target",
+            "repoURL": "https://github.com/celigo/cd-prod.git",
+            "targetRevision": "production-eu"
+        },
+        "syncPolicy": {
+            "automated": {
+                "prune": true,
+                "selfHeal": true
+            }
+        }
+    }
+}

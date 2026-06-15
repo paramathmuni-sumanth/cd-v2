@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-load-testing
+spec:
+  destination:
+    namespace: testing
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://github.com/celigo/cd.git
+    targetRevision: qa-prod
+    path: testing/prometheus
+    helm:
+      valueFiles:
+        - values.yaml
+      releaseName: prometheus-load-testing
+  project: testing
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

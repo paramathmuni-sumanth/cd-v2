@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "authentication-service"
+    CUSTOM_URI: "http://authentication-service.master-dev-io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "authentication-service"
+    pullPolicy: Always
+    tag: ""

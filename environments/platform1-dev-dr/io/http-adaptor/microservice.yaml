@@ -1,0 +1,185 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/salesforce-adaptor
+                  - cluster.local/ns/io/sa/as2-adaptor
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/testing/sa/loadtesting
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "http-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 0
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2500m
+          memory: 3814Mi
+        requests:
+          cpu: 1500m
+          memory: 3302Mi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" == "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" == "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 86400
+      podAnnotations:
+        traffic.sidecar.istio.io/excludeOutboundPorts: '15001'
+        redeployTimestamp: 2024-05-09-11-00
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 2
+        maxReplicas: 15
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+        behavior:
+          scaleDown:
+            policies:
+              - periodSeconds: 60
+                type: Pods
+                value: 1
+            selectPolicy: Max
+            stabilizationWindowSeconds: 120
+          scaleUp:
+            policies:
+              - periodSeconds: 15
+                type: Percent
+                value: 50
+            selectPolicy: Max
+            stabilizationWindowSeconds: 60
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          connectTimeout: 30s
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::857438227645:role/http-adaptor-s3-role-k8s-platform1-dev-dr
+  virtualService:
+    enabled: true
+    hosts:
+      - http-adaptor.celigo.io
+      - http-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - http-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  PersistentVolumeClaims:
+    - name: http-adaptor-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc
+  configVolume:
+    probe-config.json: |
+      {
+        "DUMP_ENABLED": true,
+        "HEAP_DUMP_THRESHOLD": 3,
+        "HEAPDUMP_ENABLED": false
+      }
+  volumes:
+    - name: probe-config-volume
+      configMap:
+        name: http-adaptor-config-volume
+    - name: http-adaptor-nfs-storage
+      persistentVolumeClaim:
+        claimName: http-adaptor-nfs-pvc
+  volumeMounts:
+    - mountPath: "/service-core-dumps"
+      name: http-adaptor-nfs-storage
+    - mountPath: "/opt/probe-config"
+      name: probe-config-volume
+  deployments:
+    - name: node22-app
+      deployment:
+        image:
+          tag: node22-fb-0.0.1.732.0
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              celigo-pingmode:
+                exact: "true"
+    - name: file-temp-app
+      deployment:
+        image:
+          tag: ml-0.0.1.209.0
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - sourceLabels:
+              name: file-adaptor
+              deploymentName: app
+    - name: app-canary
+      deployment:
+        image:
+          tag: ml-0.0.1.209.0
+        livenessProbe:
+          enabled: true
+          timeoutSeconds: 15
+          config:
+            exec:
+              command:
+                - /bin/sh
+                - /opt/docker/probe-scripts/probe.sh
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              # subscriptionType:
+              #   exact: free
+              userid:
+                regex: "^(65bd01c452cd52df086b1157|66864096c53eed924d2d4808)$"
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.1.209.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+  env:
+    aws_region: us-west-2
+    ENVIRONMENT_VARIABLES_S3_BUCKET_NAME: celigo-k8s-platform1-dev-dr-env-vars

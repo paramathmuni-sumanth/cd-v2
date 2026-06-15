@@ -1,0 +1,142 @@
+microservice:
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-workers-ping
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: application-type
+                operator: In
+                values:
+                  - ping
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    deployment:
+      containerPort: 5000
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - -c
+              - expected="0"; count=""; wget -qO- "http://localhost:5000/openConnections?terminate=true"; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- "http://localhost:5000/openConnections"); sleep 5; done; wget -qO- "http://localhost:5000/stopServer"; echo "Done";
+      replicaCount: 1
+      resources:
+        limits:
+          cpu: 500m
+          memory: 2Gi
+        requests:
+          cpu: 500m
+          memory: 1Gi
+      revisionHistoryLimit: 1
+      readinessProbe:
+        enabled: false
+      livenessProbe:
+        enabled: false
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2024-05-09-11-00
+    hpa:
+      autoscaling:
+        enabled: false
+        maxReplicas: 1
+        minReplicas: 1
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+    image:
+      name: integrator-workers
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    subscriptionType:
+      enabled: false
+  deployments:
+    - deployment:
+        image:
+          tag: ml-1.0.0.184.0
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: application-type
+                      operator: In
+                      values:
+                        - ping
+        tolerations:
+          - key: "application-type"
+            operator: "Equal"
+            value: "ping"
+            effect: "NoSchedule"
+      name: app
+      subsetConfig:
+        routes: []
+        selectorLabels: {}
+  destinationRules:
+    enabled: true
+  env:
+    ENVIRONMENT_VARIABLES_S3_BUCKET_NAME: celigo-k8s-qa-env-vars
+    NEW_RELIC_APP_NAME: qa1-integrator-workers-ping
+    NODE_ENV: staging
+    NODE_OPTIONS: --max-old-space-size=512
+    aws_region: ap-south-1
+    MODE: P
+    MAX_LOAD: 1000
+    IGNORE_WHITELISTED_CONNECTIONS: true
+    IP_WHITELISTING_CONNECTION_IDS: 6639c88db22c596e36e2fd6b,66385f0768abefa6f6268da3,662f81c8d1c0f28dc1230a46,6639ca72ee8d6fb1651fb8b1,6638be35d78f941e544ad1e7,6638bfed894be85a1addc61b,6639cc605e333876abfbb2bf,6634d692d7886886fdc5ad05,6638c1f9d78f941e544b4a12,6634af9ddaaae04bb32b582e,6639c940b22c596e36e31256,66337bc577203cac22d4b8ae,663488577b7c977fe7a56399,6633ad2040232d42913de6fe,66339e3f2aed2ad912f995dd
+    IP_MODE: private
+  ingress:
+    enabled: false
+  service:
+    port: 80
+    type: ClusterIP
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/integrator-workers-s3-role-k8s
+    create: true
+  tolerations:
+    - key: "application-type"
+      operator: "Equal"
+      value: "ping"
+      effect: "NoSchedule"
+  virtualService:
+    enabled: true
+    hosts:
+      - integrator-workers-ping.celigo.io
+      - integrator-workers-ping.io.svc.cluster.local

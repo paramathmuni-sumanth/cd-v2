@@ -1,0 +1,103 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/testing/sa/default
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: integrator-system-workers
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 6Gi
+        requests:
+          cpu: 300m
+          memory: 4Gi
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; wget -qO- "http://localhost:5000/openConnections?terminate=true"; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- "http://localhost:5000/openConnections"); sleep 5; done; wget -qO- "http://localhost:5000/stopServer"; echo "Done";
+      podAnnotations:
+        redeployTimestamp: 2026-05-15-16-05
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 1
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::028270547034:role/integrator-system-workers-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - integrator-system-workers.core.svc.cluster.local
+      - integrator-system-workers.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-system-workers
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: sandbox-migration-do-not-remove
+      env:
+        WORKER_TYPE: "sandboxMigration"
+        MAX_LOAD: 1
+        MAX_CONSUMER_CHILD_PROCESSES: 1
+      deployment:
+        image:
+          tag: webhook-enhancement-fb-1.0.0.584.0
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 2Gi
+          limits:
+            cpu: 1500m
+            memory: 3Gi
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: app
+      deployment:
+        image:
+          tag: apim-gating-fb-1.0.0.232.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

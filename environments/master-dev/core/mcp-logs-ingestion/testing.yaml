@@ -1,0 +1,16 @@
+testing:
+  env:
+    SERVICE: "mcp-logs-ingestion"
+    CUSTOM_URI: "http://mcp-logs-ingestion.master-dev-core.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "mcp-logs-ingestion"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

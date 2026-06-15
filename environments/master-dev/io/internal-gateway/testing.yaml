@@ -1,0 +1,16 @@
+testing:
+  env:
+    SERVICE: "internal-gateway"
+    CUSTOM_URI: "http://internal-gateway.master-dev-io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "internal-gateway"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

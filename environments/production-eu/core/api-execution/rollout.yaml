@@ -1,0 +1,12 @@
+service: api-execution
+analysis:
+  source: splunk
+  query: >
+    search earliest=-5m index="apm_traces" "k8s.cluster.name"=production-eu-aws-eks-eu-central- "k8s.namespace.name" IN ("core") "k8s.container.name"=api-execution k8s.pod.name=*canary*
+    (level="error" OR "uncaughtException" OR "TypeError")
+    | eval fail=if(level="error" OR searchmatch("uncaughtException") OR searchmatch("TypeError"), 1, 0)
+    | stats sum(fail) as failCount, count as totalCount
+    | eval errorRate=if(totalCount > 0, failCount/totalCount, 0)
+    | eval finalResultHolder=if(totalCount == 0 OR errorRate < 0.001, "true", "false")
+    | fields failCount, totalCount, errorRate, finalResultHolder
+  frequency: 7m

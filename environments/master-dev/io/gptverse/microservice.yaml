@@ -1,0 +1,99 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/master-dev-io/sa/api-gateway
+                  - cluster.local/ns/master-dev-io/sa/integrator-workers
+                  - cluster.local/ns/master-dev-io/sa/integrator-workers-ping
+                  - cluster.local/ns/master-dev-core/sa/integrator-system-workers
+                  - cluster.local/ns/master-dev-core/sa/resource-management
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "gptverse"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 200m
+          memory: 512Mi
+        requests:
+          cpu: 100m
+          memory: 256Mi
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - 'expected="200 500"; for i in $(seq 1 3); do response=$(wget -S -O /dev/null "http://127.0.0.1:5000/openConnections?terminate=true" 2>&1); status_code=$(echo "$response" | grep -oE "HTTP/[0-9]+\.[0-9]+ [0-9]+" | tail -1 | awk "{print \$2}"); case $expected in *$status_code*) echo "Expected status code received: $status_code"; break;; *) echo "Unexpected status code received: $status_code. Retrying in 130 seconds..."; sleep 130;; esac; done; echo "Done";'
+      podAnnotations:
+        redeployTimestamp: 2024-08-12-14-45
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 1
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::028270547034:role/gptverse-s3-role-k8s-master-dev
+  virtualService:
+    enabled: true
+    gateways:
+      - istio-gateway/master-dev
+    hosts:
+      - gptverse.celigo.io
+      - gptverse.master-dev-io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - gptverse
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.141.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

@@ -1,0 +1,140 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/io/sa/as2-adaptor
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/core/sa/integrator-system-workers
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /metrics
+  common:
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "file-service"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1.8
+          memory: 3G
+        requests:
+          cpu: 600m
+          memory: 2.5G
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - -c
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 7200
+      podAnnotations:
+        celigo.io/scrape: 'slow'
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 4
+        maxReplicas: 18
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/file-service-s3-role-k8s-production-na
+  virtualService:
+    enabled: true
+    hosts:
+      - file-service.celigo.io
+      - file-service.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - file-service
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    newRelic.json: |
+      {
+        "enableNR": true,
+        "distributedNR": true,
+        "transactions": ["custom"],
+        "resources": {
+          "_userId": [],
+          "_importId": [],
+          "_exportId": [],
+          "_connectionId": []
+        }
+      }
+  volumes:
+    - name: file-service-nr-config
+      configMap:
+        name: file-service-config-volume
+  volumeMounts:
+    - mountPath: "/file-service/config/"
+      name: file-service-nr-config
+  deployments:
+    - name: memory-temp-app
+      deployment:
+        image:
+          tag: ml-1.0.1.73.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 4
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(608b560dac2e515ece1bac13|6836cc1472cb0fb07a0db651)$'
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.1.73.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

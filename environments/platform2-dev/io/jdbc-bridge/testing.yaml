@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "jdbc-bridge"
+    CUSTOM_URI: "http://jdbc-bridge.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "jdbc-bridge"
+    pullPolicy: Always
+    tag: ""

@@ -1,0 +1,42 @@
+service: file-service
+analysis:
+  source: splunk
+  query: >
+    search
+    earliest=-5m 
+    index=apm_traces
+    deployment.environment=qa1
+    k8s.container.name=file-service
+    k8s.pod.name=*canary*
+    (logName=serverHit OR (level IN ("error", "fatal") NOT "enter AWS SDK for JavaScript" NOT "newrelic") OR *unhandled* OR *uncaught* OR *TypeError* OR *fatal*)
+    | eval pass=if(sc >= 200 AND sc < 300, 1, 0),
+           fail=if(sc >= 300 OR match(_raw, "(?i)fatal|unexpected|uncaught|error|typeerror|unhandled"), 1, 0),
+           fatal=if(level="fatal" OR match(_raw, "(?i)fatal"), 1, 0),
+           relevantForTotal=if(logName="serverHit", 1, 0)
+    | stats sum(pass) as passCount,   
+            sum(fail) as failCount, 
+            sum(fatal) as fatalCount,
+            sum(relevantForTotal) as totalCount
+    | eval errorRate=if(totalCount > 0, failCount / totalCount, 0),
+           finalResultHolder=case(
+               fatalCount >= 1, "false",
+               totalCount == 0 OR errorRate < 0.4, "true",
+               true(), "false"
+           )
+    | appendpipe [| stats count | where count==0 | eval passCount=0, failCount=0, fatalCount=0, totalCount=0, errorRate=0, finalResultHolder="true" | fields - count]           
+    | fields passCount, failCount, fatalCount, totalCount, errorRate, finalResultHolder
+  frequency: 5m
+disabled: true
+versions:
+  - version: v2
+    isPromotable: true
+    lastApplied: 2021-09-01 12:00:00
+    stages:
+      - wait: 10m
+        groups: ['File Canary User IDs 1']
+      - wait: 10m
+        $push:
+          groups: ['File Canary User IDs 2']
+      - wait: 10m
+        $push:
+          groups: ['File Canary User IDs 3']

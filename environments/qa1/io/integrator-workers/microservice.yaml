@@ -1,0 +1,235 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/lookup-cache
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "integrator-workers"
+    subscriptionType:
+      enabled: false
+    deployment:
+      livenessProbe:
+        failureThreshold: 6
+      readinessProbe:
+        failureThreshold: 3
+      revisionHistoryLimit: 1
+      replicaCount: 8
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2000m
+          memory: 14Gi
+        requests:
+          cpu: 1500m
+          memory: 10Gi
+      startupProbe:
+        enabled: true
+        path: "/"
+        port: "9999"
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        timeoutSeconds: 10
+        successThreshold: 1
+        failureThreshold: 5
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; wget -qO- "http://localhost:5000/openConnections?terminate=true"; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- "http://localhost:5000/openConnections"); sleep 5; done; wget -qO- "http://localhost:5000/stopServer"; echo "Done";
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2026-06-15-10-49-24
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 4
+        maxReplicas: 6
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+    customToken:
+      enabled: true
+      image:
+        name: "token-refresher"
+        tag: "generic-v31"
+      refreshInterval: "43200"
+      expiryTime: "86700"
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/integrator-workers-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - integrator-workers.celigo.io
+      - integrator-workers.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-workers
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    memoryProfiling.json: |
+      {
+        "enabled": true,
+        "dumpInterval": 0,
+        "profileUntil": null,
+        "podPatterns": [
+          {
+            "pattern": "integrator-workers-test-high-concurrency-.*",
+            "enabled": true,
+            "dumpInterval": 3600000,
+            "profileUntil": "2026-06-11T15:44:15.000Z"
+          },
+          {
+            "pattern": "integrator-workers-app-.*",
+            "enabled": false,
+            "dumpInterval": 3600000
+          }
+        ],
+        "pods": {}
+      }
+    cpuProfiling.json: |
+      {
+        "enabled": false,
+        "durationMs": 5000,
+        "profileIntervalMs": 60000,
+        "profileUntil": null,
+        "podPatterns": [
+          {
+            "pattern": "integrator-workers-test-high-concurrency-.*",
+            "enabled": true,
+            "durationMs": 3000,
+            "profileIntervalMs": 300000,
+            "profileUntil": "2026-06-11T15:44:15.000Z"
+          },
+          {
+            "pattern": "integrator-workers-app-.*",
+            "enabled": false
+          }
+        ],
+        "pods": {
+          "integrator-workers-app-6f89584f8f-fvfdh": {
+            "enabled": true,
+            "durationMs": 3000,
+            "profileIntervalMs": 300000,
+            "profileUntil": "2026-06-11T15:40:15.000Z"
+          }
+        }
+      }
+    cpuBlockedProfiling.json: |
+      {
+        "enabled": true,
+        "rotationIntervalMs": 300000,
+        "podPatterns": [],
+        "pods": {}
+      }
+  PersistentVolumeClaims:
+    - name: integrator-workers-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-enterprise-logs
+  volumes:
+    - name: integrator-workers-nfs-storage
+      persistentVolumeClaim:
+        claimName: integrator-workers-nfs-pvc
+    - name: integrator-workers-config
+      configMap:
+        name: integrator-workers-config-volume
+  volumeMounts:
+    - mountPath: "/mnt/efs"
+      name: integrator-workers-nfs-storage
+    - mountPath: "/etc/config/"
+      name: integrator-workers-config
+  deployments:
+    - name: diworker
+      deployment:
+        replicaCount: 2
+        image:
+          tag: ml-1.0.0.745.0
+      env:
+        WORKER_TYPE: "DIWorker"
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: diprimeworker
+      deployment:
+        replicaCount: 2
+        image:
+          tag: ml-1.0.0.745.0
+      env:
+        WORKER_TYPE: "DIPrimeWorker"
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: test-high-concurrency
+      deployment:
+        replicaCount: 2
+        image:
+          tag: ml-1.0.0.745.0
+      env:
+        WORKER_TYPE: "highConcurrency"
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: app-ws-compression
+      deployment:
+        replicaCount: 3
+        image:
+          tag: ml-1.0.0.745.0
+      env:
+        WORKER_TYPE: "wsCompression"
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.745.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

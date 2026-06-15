@@ -1,0 +1,41 @@
+service: data-warehouse-adaptor
+analysis:
+  source: splunk
+  query: >
+    search earliest=-5m
+    index=apm_traces
+    k8s.cluster.name=qa1-aws-eks-ap-south-1
+    k8s.namespace.name=io
+    k8s.container.name=data-warehouse-adaptor
+    k8s.pod.name=*canary*
+    (logName=serverHit OR (level IN ("error", "fatal")) OR *unhandled* OR *uncaught* OR *typeerror* OR *fatal*)
+    NOT logName IN ("bulkInsertError", "invalidBigQueryError", "fetchMetadataError", "snowflakeClientConnectionDestroyError", "executeQueryFailed", "bulkLoadQueryFailed", "invalidConfig", "invalidConfigMapFile", "newrelic")
+    NOT *Warning* NOT "enter AWS SDK for JavaScript"
+    NOT wsId=*fatal*
+    | eval fail=if(match(_raw, "(?i)error|fatal|unhandled|uncaught|typeerror"), 1, 0),
+           fatal=if(level="fatal", 1, 0),
+           openConnection=if(logName="serverHit" AND oc > 10, 1, 0)
+    | stats sum(fail) as failCount
+            sum(fatal) as fatalCount, 
+            sum(openConnection) as openConnectionCount
+    | eval finalResultHolder=case(
+               failCount > 0 OR fatalCount > 0 OR openConnectionCount > 0, "false",
+               true(), "true"
+           )
+    | appendpipe [| stats count | where count==0 | eval failCount=0, fatalCount=0, openConnectionCount=0, finalResultHolder="true" | fields - count]
+    | fields failCount, fatalCount, openConnectionCount, finalResultHolder
+  frequency: 5m
+disabled: true
+versions:
+  - version: v2 
+    isPromotable: true
+    lastApplied: 2021-09-01 12:00:00
+    stages:
+      - wait: 10m
+        groups: ['DB Rollout user 1']
+      - wait: 10m
+        $push:
+          groups: ['DB Rollout user 2']
+      - wait: 10m
+        $push:
+          groups: ['DB Rollout user 3']

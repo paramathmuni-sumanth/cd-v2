@@ -1,0 +1,146 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/salesforce-adaptor
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/as2-adaptor
+                  - cluster.local/ns/core/sa/api-execution
+                  - cluster.local/ns/newrelic-sjm/sa/default
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "http-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 200m
+          memory: 512Mi
+        requests:
+          cpu: 100m
+          memory: 256Mi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        traffic.sidecar.istio.io/excludeOutboundPorts: '15001'
+        redeployTimestamp: 2025-08-19-22-50
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          connectTimeout: 30s
+          tcpKeepalive:
+            time: 7200s
+            interval: 75s
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::620736318138:role/http-adaptor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - http-adaptor.celigo.io
+      - http-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - http-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app-do-not-remove
+      deployment:
+        image:
+          tag: ml-0.0.1.458.0
+        resources:
+          limits:
+            cpu: 2500m
+            memory: 3302Mi
+          requests:
+            cpu: 1300m
+            memory: 2790Mi
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 15
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-gitops-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="http-adaptor-app"})
+                threshold: "70"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 100
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 210
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

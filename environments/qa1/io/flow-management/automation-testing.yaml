@@ -1,0 +1,25 @@
+jobs:
+  - name: "DI_E2E_1"
+    env:
+      TAG: "@Zephyr-IO-T0000|@Zephyr-IO-T42448|@Zephyr-IO-T51209|@Zephyr-IO-T51210|@Zephyr-IO-T51211|@Zephyr-IO-T51214|@Zephyr-IO-T51215|@Zephyr-IO-T51216|@Zephyr-IO-T51217|@Zephyr-IO-T51219|@Zephyr-IO-T51222"
+  - name: "DI_SALESFORCE_1"
+    env:
+      TAG: "@Zephyr-IO-T30632|@Zephyr-IO-T30642|@Zephyr-IO-T30672|@Zephyr-IO-T30674|@Zephyr-IO-T30675|@Zephyr-IO-T30680|@Zephyr-IO-T30688|@Zephyr-IO-T37271|@Zephyr-IO-T51220|@Zephyr-IO-T51221"
+  - name: "DI_SALESFORCE_2"
+    env:
+      TAG: "@Zephyr-IO-T30644|@Zephyr-IO-T30645|@Zephyr-IO-T30646|@Zephyr-IO-T30647|@Zephyr-IO-T30659|@Zephyr-IO-T30681|@Zephyr-IO-T30710"
+  - name: "DI_CORE1_2"
+    env:
+      TAG: "@Zephyr-IO-T36123|@Zephyr-IO-T36124|@Zephyr-IO-T36125|@Zephyr-IO-T36126|@Zephyr-IO-T36127|@Zephyr-IO-T36140|@Zephyr-IO-T36141|@Zephyr-IO-T36142|@Zephyr-IO-T36143|@Zephyr-IO-T36144"
+  - name: "DI_CORE1_1"
+    env:
+      TAG: "@Zephyr-IO-T30606|@Zephyr-IO-T37295"
+  - name: "DI_INGESTIONMODE"
+    env:
+      TAG: "@Zephyr-IO-T51762|@Zephyr-IO-T51796|@Zephyr-IO-T51797|@Zephyr-IO-T51799|@Zephyr-IO-T51800|@Zephyr-IO-T51803|@Zephyr-IO-T51804|@Zephyr-IO-T51808|@Zephyr-IO-T51809|@Zephyr-IO-T51810|@Zephyr-IO-T67132"
+  - name: "DI_MANAGEMENT"
+    env:
+      TAG: "@Zephyr-IO-T53192|@Zephyr-IO-T53193|@Zephyr-IO-T53194|@Zephyr-IO-T53195|@Zephyr-IO-T53196|@Zephyr-IO-T53197|@Zephyr-IO-T53198"
+  - name: "DI_CORE2"
+    env:
+      TAG: "@Zephyr-IO-T35449|@Zephyr-IO-T35451"

@@ -1,0 +1,184 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/io/sa/endpoint-service
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /ftp-bridge-ms/metrics
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: ftp-bridge-ms
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 8080
+      resources:
+        limits:
+          cpu: 2824m
+          memory: 4800Mi
+        requests:
+          cpu: 600m
+          memory: 4200Mi
+      terminationGracePeriodSeconds: 3600
+      livenessProbe:
+        enabled: true
+        config:
+          httpGet:
+            path: /ftp-bridge-ms/livez
+      readinessProbe:
+        enabled: true
+        path: "/ftp-bridge-ms/readyz"
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:8080/ftp-bridge-ms/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in seq 1 5; do count=$(wget -qO- 'http://localhost:8080/ftp-bridge-ms/openConnections?terminate=true'); sleep 5; done; fi; done; catalina.sh stop;
+      podAnnotations:
+        redeployTimestamp: 2025-12-05-10-35
+        celigo.io/scrape: 'fast'
+        celigo.io/path: "/ftp-bridge-ms/metrics"
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 3
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/ftp-bridge-ms-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - ftp-bridge-ms.io.svc.cluster.local
+      - ftp-bridge-ms.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - ftp-bridge-ms
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    log4j2.properties: |
+      status = error
+      name = PropertiesConfig
+      customLevel.ACTIVE_MODE_DEBUG = 425
+      customLevel.CUSTOM_DEBUG = 450
+      customLevel.JSCH_DEBUG = 475
+      appenders = console
+      appender.console.type = Console
+      appender.console.name = LogToConsole
+      appender.console.layout.type = PatternLayout
+      appender.console.layout.pattern = %d{ISO8601} %-5p (%13F:%L) - %m%n
+      rootLogger.level = ${env:DEPLOYMENT_SPECIFIC_LOG_LEVEL:-info}
+      rootLogger.additivity = false
+      rootLogger.appenderRef.console.ref = LogToConsole
+      monitorInterval = 60
+    newRelic.json: |
+      {
+        "enableNR": true,
+        "transactions": [],
+        "userIds": [],
+        "expOrImpIds": ["686907b472178d4add9e7169","686e25165da3e95c9f71b4e4","686e264ad5725eba27a97b4f","686e273cd5725eba27a97c36","686e28edd19250dbdf4c130e","686b7091d434e08eb1e50c79","68837e96875a4a7f3b77d233"],
+        "connectionIds": []
+      }
+  volumes:
+    - name: ftp-bridge-ms-config
+      configMap:
+        name: ftp-bridge-ms-config-volume
+  volumeMounts:
+    - name: ftp-bridge-ms-config
+      mountPath: /etc/config
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.1.88.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 3
+          maxReplicas: 10
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="ftp-bridge-ms-app"})
+                threshold: "60"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

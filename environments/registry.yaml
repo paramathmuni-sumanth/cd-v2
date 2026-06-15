@@ -1,0 +1,113 @@
+# Canonical registry of all deployment environments consolidated in cd-v2.
+# Each environment maps to a folder under environments/{name}/.
+# Legacy source is documented for cutover and rollback.
+
+environments:
+  # --- celigo/cd (branch = environment) ---
+  qa1:
+    source_repo: celigo/cd
+    source_branch: qa1
+    folder: environments/qa1
+    region: ap-south-1
+    tier: qa
+
+  qa-prod:
+    source_repo: celigo/cd
+    source_branch: qa-prod
+    folder: environments/qa-prod
+    region: ap-south-1
+    tier: qa
+
+  ia-qa:
+    source_repo: celigo/cd
+    source_branch: ia-qa
+    folder: environments/ia-qa
+    region: ap-south-1
+    tier: qa
+
+  core:
+    source_repo: celigo/cd
+    source_branch: core
+    folder: environments/core
+    region: ap-south-1
+    tier: qa
+
+  platform1-dev:
+    source_repo: celigo/cd
+    source_branch: platform1-dev
+    folder: environments/platform1-dev
+    region: ap-south-1
+    tier: dev
+
+  platform2-dev:
+    source_repo: celigo/cd
+    source_branch: platform2-dev
+    folder: environments/platform2-dev
+    region: ap-south-1
+    tier: dev
+
+  platform3-dev:
+    source_repo: celigo/cd
+    source_branch: platform3-dev
+    folder: environments/platform3-dev
+    region: ap-south-1
+    tier: dev
+
+  platform4-dev:
+    source_repo: celigo/cd
+    source_branch: platform4-dev
+    folder: environments/platform4-dev
+    region: ap-south-1
+    tier: dev
+
+  platform5-dev:
+    source_repo: celigo/cd
+    source_branch: platform5-dev
+    folder: environments/platform5-dev
+    region: ap-south-1
+    tier: dev
+
+  platform1-dev-dr:
+    source_repo: celigo/cd
+    source_branch: platform1-dev-dr
+    folder: environments/platform1-dev-dr
+    region: ap-south-1
+    tier: dev
+
+  # --- celigo/cd-staging ---
+  staging:
+    source_repo: celigo/cd-staging
+    source_branch: staging
+    folder: environments/staging
+    region: us-east-1
+    tier: staging
+
+  # --- celigo/cd-prod ---
+  production-na:
+    source_repo: celigo/cd-prod
+    source_branch: production-na
+    folder: environments/production-na
+    region: us-east-1
+    tier: production
+
+  production-eu:
+    source_repo: celigo/cd-prod
+    source_branch: production-eu
+    folder: environments/production-eu
+    region: eu-west-1
+    tier: production
+
+  # --- celigo/dev-environments ---
+  master-dev:
+    source_repo: celigo/dev-environments
+    source_branch: master-dev
+    folder: environments/master-dev
+    region: us-east-1
+    tier: dev
+
+# ArgoCD target for v2 layout (after cutover):
+#   repoURL: https://github.com/paramathmuni-sumanth/cd-v2.git
+#   targetRevision: main
+#   helm.valueFiles:
+#     - ../../../environments/{env}/{domain}/{service}/microservice.yaml
+#     - ../../../environments/{env}/{domain}/{service}/env.yaml   # if present

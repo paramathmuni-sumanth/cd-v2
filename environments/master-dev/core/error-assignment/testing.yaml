@@ -1,0 +1,16 @@
+testing:
+  env:
+    SERVICE: "error-assignment"
+    CUSTOM_URI: "http://error-assignment.master-dev-core.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "error-assignment"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

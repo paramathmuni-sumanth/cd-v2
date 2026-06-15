@@ -1,0 +1,37 @@
+{
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+        "name": "pod-recycle",
+        "namespace": "argocd",
+        "finalizers": [
+            "resources-finalizer.argocd.argoproj.io"
+        ]
+    },
+    "spec": {
+        "project": "default",
+        "source": {
+            "helm": {
+                "valueFiles": [
+                    "values.yaml"
+                ]
+            },
+            "path": "charts/pod-recycle",
+            "repoURL": "https://github.com/celigo/cd.git",
+            "targetRevision": "qa-prod"
+        },
+        "destination": {
+            "namespace": "pod-recycle",
+            "server": "https://kubernetes.default.svc"
+        },
+        "syncPolicy": {
+            "automated": {
+                "prune": true,
+                "selfHeal": true
+            },
+            "syncOptions": [
+                "CreateNamespace=true"
+            ]
+        }
+    }
+}

@@ -1,0 +1,16 @@
+testing:
+  env:
+    SERVICE: "anomaly-detector"
+    CUSTOM_URI: "http://anomaly-detector.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "anomaly-detector"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

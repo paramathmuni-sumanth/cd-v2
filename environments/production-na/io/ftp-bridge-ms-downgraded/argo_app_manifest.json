@@ -1,0 +1,38 @@
+{
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+        "name": "ftp-bridge-ms-downgraded",
+        "namespace": "argocd",
+        "finalizers": [
+            "resources-finalizer.argocd.argoproj.io"
+        ]
+    },
+    "spec": {
+        "project": "io",
+        "source": {
+            "helm": {
+                "valueFiles": [
+                    "../../io/ftp-bridge-ms-downgraded/microservice.yaml",
+                    "../../io/ftp-bridge-ms-downgraded/env.yaml"
+                ]
+            },
+            "path": "charts/microservice",
+            "repoURL": "https://github.com/celigo/cd-prod.git",
+            "targetRevision": "production-na"
+        },
+        "destination": {
+            "namespace": "io",
+            "server": "https://kubernetes.default.svc"
+        },
+        "syncPolicy": {
+            "automated": {
+                "prune": true,
+                "selfHeal": true
+            },
+            "syncOptions": [
+                "CreateNamespace=true"
+            ]
+        }
+    }
+}

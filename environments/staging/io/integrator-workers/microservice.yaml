@@ -1,0 +1,173 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    secretRef: newrelic-no-secrets
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "integrator-workers"
+    subscriptionType:
+      enabled: false
+    deployment:
+      livenessProbe:
+        failureThreshold: 6
+      readinessProbe:
+        failureThreshold: 3
+      revisionHistoryLimit: 1
+      replicaCount: 8
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2000m
+          memory: 12Gi
+        requests:
+          cpu: 1200m
+          memory: 8Gi
+      startupProbe:
+        enabled: true
+        path: "/"
+        port: "9999"
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        timeoutSeconds: 10
+        successThreshold: 1
+        failureThreshold: 5
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; wget -qO- "http://localhost:5000/openConnections?terminate=true"; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- "http://localhost:5000/openConnections"); sleep 5; done; wget -qO- "http://localhost:5000/stopServer"; echo "Done";
+      terminationGracePeriodSeconds: 86400
+      podAnnotations:
+        redeployTimestamp: 2026-06-01-17-00
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 5
+        maxReplicas: 8
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+    customToken:
+      enabled: true
+      image:
+        name: "token-refresher"
+        tag: "generic-v31"
+      refreshInterval: "43200"
+      expiryTime: "86700"
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::609704034070:role/integrator-workers-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - integrator-workers.celigo.io
+      - integrator-workers.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-workers
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  configVolume:
+    memoryProfiling.json: |
+      {
+        "enabled": false,
+        "dumpInterval": 0,
+        "podPatterns": [],
+        "pods": {}
+      }
+  PersistentVolumeClaims:
+    - name: integrator-workers-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-enterprise-logs
+  volumes:
+    - name: integrator-workers-nfs-storage
+      persistentVolumeClaim:
+        claimName: integrator-workers-nfs-pvc
+    - name: integrator-workers-config
+      configMap:
+        name: integrator-workers-config-volume
+  volumeMounts:
+    - mountPath: "/mnt/efs"
+      name: integrator-workers-nfs-storage
+    - mountPath: "/etc/config/"
+      name: integrator-workers-config
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: chuncking-queue-worker
+      env:
+        MAX_CONSUMER_LOAD: 30
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+        WORKER_TYPE: "ChunckingQueueWorker"
+      deployment:
+        replicaCount: 2
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: app
+      env:
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+      deployment:
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: high-concurrency
+      env:
+        WORKER_TYPE: "highConcurrency"
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+      deployment:
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+        replicaCount: 2
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

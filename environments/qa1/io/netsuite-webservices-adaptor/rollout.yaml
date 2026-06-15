@@ -1,0 +1,44 @@
+service: netsuite-webservices-adaptor
+
+analysis:
+  source: splunk
+  query: >
+    search
+    earliest=-5m 
+    index=apm_traces 
+    k8s.cluster.name=qa1-aws-eks-ap-south-1
+    k8s.namespace.name IN ("IO")
+    k8s.container.name=netsuite-webservices-adaptor
+    k8s.pod.name=*canary*
+    (logName=onSendResponse OR logName=serverHit OR level IN ("error", "fatal") OR *fatal* OR *unexpected* OR *unhandled* OR *uncaught* OR TypeError)
+    | eval pass=if(sc >= 200 AND sc < 300, 1, 0),
+           fail=if(sc >= 300 OR match(_raw, "(?i)fatal|unexpected|error|typeerror|unhandled"), 1, 0),
+           openConnection=if(logName="serverHit" AND oc > 95, 1, 0),
+           relevantForTotal=if(logName="onSendResponse", 1, 0)
+    | stats sum(pass) as passCount,   
+            sum(fail) as failCount, 
+            sum(openConnection) as openConnectionCount,
+            sum(relevantForTotal) as totalCount
+    | eval errorRate=if(totalCount > 0, failCount / totalCount, 0),
+           finalResultHolder=case(
+               totalCount == 0 OR errorRate < 0.3, "true",
+               true(), "false"
+           )
+    | appendpipe [| stats count | where count==0 | eval passCount=0, failCount=0, openConnectionCount=0, totalCount=0, errorRate=0, finalResultHolder="true" | fields - count]
+    | fields passCount, failCount, openConnectionCount, totalCount, errorRate, finalResultHolder
+
+  frequency: 5m
+disabled: true
+versions:
+  - version: v2
+    isPromotable: true
+    lastApplied: 2021-09-01 12:00:00
+    stages:
+      - wait: 10m
+        groups: ['NS-Webservices-test']
+      - wait: 10m
+        $push:
+          groups: ['NS-Webservices-Group1']
+      - wait: 10m
+        $push:
+          groups: ['NS-Webservices-Group2']

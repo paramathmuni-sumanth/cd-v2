@@ -1,0 +1,25 @@
+{
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+        "name": "envoy-filters",
+        "namespace": "argocd"
+    },
+    "spec": {
+        "destination": {
+            "server": "https://kubernetes.default.svc"
+        },
+        "project": "foundationlayer",
+        "source": {
+            "path": "tools/envoy-filters",
+            "repoURL": "https://github.com/celigo/cd-prod.git",
+            "targetRevision": "production-na"
+        },
+        "syncPolicy": {
+            "automated": {
+                "prune": true,
+                "selfHeal": true
+            }
+        }
+    }
+}

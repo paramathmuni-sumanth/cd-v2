@@ -1,0 +1,441 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "integrator-app-ui"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 500m
+          memory: 400Mi
+        requests:
+          cpu: 100m
+          memory: 250Mi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2025-10-08-11-34
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/integrator-app-ui-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - '*'
+    gateways:
+      - istio-gateway/istio-in-gw-integ
+    http:
+      - match:
+          - uri:
+              prefix: /internal/slackbot/
+        rewrite:
+          uri: /
+        route:
+          - destination:
+              host: devops-slackbot.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /internal/notifications/
+        rewrite:
+          uri: /api/
+        route:
+          - destination:
+              host: slack-notifications.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /internal/ai-agents-celigo
+        rewrite:
+          uri: /
+        route:
+          - destination:
+              host: ai-agents-celigo.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /internal/agentic-ui-playground
+        rewrite:
+          uri: /
+        route:
+          - destination:
+              host: agentic-ui-playground.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /internal/integrator-cs-tools
+        route:
+          - destination:
+              host: integrator-cs-tools.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /internal/ai-testcase-autogeneration/api/
+        rewrite:
+          uri: /api/
+        route:
+          - destination:
+              host: ai-testcase-autogeneration.internal.svc.cluster.local
+              subset: api
+      - match:
+          - uri:
+              prefix: /internal/ai-testcase-autogeneration
+        route:
+          - destination:
+              host: ai-testcase-autogeneration.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /internal/s3-http-ia/
+          - uri:
+              prefix: /internal/s3-http-ia
+        rewrite:
+          uri: /
+        route:
+          - destination:
+              host: s3-http-ia.ia.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /internal/ai-qic
+        rewrite:
+          uri: /
+        route:
+          - destination:
+              host: ai-qic.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /internal/ai-documentation-generation
+        route:
+          - destination:
+              host: ai-documentation-generation.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /internal/ai-agentic-workflow
+        rewrite:
+          uri: /
+        route:
+          - destination:
+              host: ai-agentic-workflow.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /internal/celigo-authx
+        route:
+          - destination:
+              host: httpmockserver.io.svc.cluster.local
+              subset: app
+      - match:
+          - method:
+              regex: "^(GET|POST)$"
+            uri:
+              prefix: /api/chatkit
+        route:
+          - destination:
+              host: celigo-agent.io.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /v0/httpmockserver
+        route:
+          - destination:
+              host: httpmockserver.io.svc.cluster.local
+      - match:
+          - uri:
+              prefix: /hello-world
+        route:
+          - destination:
+              host: hello-world.ia.svc.cluster.local
+      - match:
+          - uri:
+              exact: /classifications/errorsv3
+        route:
+          - destination:
+              host: error-classifier-v3.io.svc.cluster.local
+      - match:
+          - uri:
+              exact: /classifications/errors
+        route:
+          - destination:
+              host: error-classifier-v2.io.svc.cluster.local
+      - match:
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /oidc
+          - method:
+              exact: GET
+            uri:
+              prefix: /.well-known/oauth-authorization-server
+          - method:
+              exact: GET
+            uri:
+              exact: /.well-known/openid-configuration
+          - method:
+              exact: GET
+            uri:
+              prefix: /.well-known/oauth-protected-resource
+          - method:
+              exact: GET
+            uri:
+              prefix: /netSuiteWS/
+          - method:
+              exact: PUT
+            uri:
+              exact: /netsuiteDA/previewImportMappingFields
+          - method:
+              exact: GET
+            uri:
+              exact: /publishedHttpConnectors
+          - method:
+              exact: GET
+            uri:
+              prefix: /region/redirect/
+          - method:
+              exact: GET
+            uri:
+              exact: /celigouniversity/sso
+          - method:
+              regex: "^(GET|PUT)$"
+            uri:
+              regex: '/exports/[^/]+/distributed'
+          - method:
+              regex: "^(GET|PUT)$"
+            uri:
+              regex: '/imports/[^/]+/distributed'
+          - method:
+              exact: GET
+            uri:
+              exact: /litmos/sso
+          - method:
+              exact: GET
+            uri:
+              prefix: /zendesk/
+          - method:
+              exact: GET
+            uri:
+              regex: '/token-status/[^/]+'
+          - method:
+              exact: POST
+            uri:
+              prefix: /signin
+          - method:
+              exact: GET
+            uri:
+              regex: '/signin/errors/[^/]+'
+          - method:
+              exact: GET
+            uri:
+              prefix: /csrf
+          - method:
+              exact: POST
+            uri:
+              prefix: /mfa/verify
+          - method:
+              exact: POST
+            uri:
+              prefix: /signout
+          - method:
+              exact: GET
+            uri:
+              prefix: /auth/google/oauth2callback
+          - method:
+              exact: POST
+            uri:
+              prefix: /auth/google
+          - method:
+              regex: "^(GET|POST)$"
+            uri:
+              prefix: /sso
+          - method:
+              regex: "^(GET|POST)$"
+            uri:
+              exact: /reSigninWithGoogle
+          - method:
+              exact: POST
+            uri:
+              exact: /request-reset
+          - method:
+              exact: POST
+            uri:
+              exact: /signup
+          - method:
+              exact: POST
+            uri:
+              exact: /set-initial-password
+          - method:
+              exact: POST
+            uri:
+              exact: /accept-invite
+          - method:
+              exact: POST
+            uri:
+              exact: /accept-invite-metadata
+          - method:
+              exact: POST
+            uri:
+              exact: /reset-password
+          - method:
+              exact: POST
+            uri:
+              exact: /change-email
+          - method:
+              regex: "^(GET|POST)$"
+            uri:
+              prefix: /reSigninWithSSO
+          - method:
+              exact: POST
+            uri:
+              exact: /link/google
+          - method:
+              exact: POST
+            uri:
+              exact: /unlink/google
+          - method:
+              exact: GET
+            uri:
+              exact: /status
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /api/
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /v1/
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /system/v1
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /netsuite/v1
+          - method:
+              regex: "^(GET|PUT)$"
+            uri:
+              regex: '/connections/[^/]+/distributed'
+          - method:
+              exact: PUT
+            uri:
+              regex: '/connections/[^/]+/mappingPreview'
+          - method:
+              exact: GET
+            uri:
+              prefix: /connection/
+          - method:
+              exact: POST
+            uri:
+              regex: '^/(i|e)[a-zA-Z0-9]{9}$'
+          - authority:
+              exact: api.qa.staging.integrator.io
+          - method:
+              exact: POST
+            uri:
+              exact: /request-email-verification
+          - method:
+              exact: POST
+            uri:
+              exact: /verify-user
+          - method:
+              exact: GET
+            uri:
+              exact: /account-suggestions
+        route:
+          - destination:
+              host: api-gateway.io.svc.cluster.local
+              subset: app
+      - match:
+          - method:
+              exact: POST
+            uri:
+              exact: /receive
+          - method:
+              exact: POST
+            uri:
+              exact: /as2-exports
+        route:
+          - destination:
+              host: as2-mock.io.svc.cluster.local
+      - match:
+          - method:
+              exact: POST
+            uri:
+              prefix: /detect_anomalies
+          - method:
+              exact: POST
+            uri:
+              prefix: /detect_anomalies_for_endpoints
+        route:
+          - destination:
+              host: anomaly-detector.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-app-ui
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-2.0.3.140.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

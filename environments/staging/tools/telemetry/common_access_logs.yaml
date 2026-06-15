@@ -1,0 +1,11 @@
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: io-5xx-access-logs
+  namespace: io
+spec:
+  accessLogging:
+    - providers:
+      - name: access-log-provider
+      filter:
+        expression: response.code >= 500

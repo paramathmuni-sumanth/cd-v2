@@ -1,0 +1,129 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    secretRef: newrelic-secrets
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "error-management"
+    subscriptionType:
+      enabled: false
+    deployment:
+      rolloutStrategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxSurge: 50%
+          maxUnavailable: 50%
+      podAnnotations:
+        sidecar.istio.io/proxyCPU: "50m"
+        sidecar.istio.io/proxyCPULimit: "2000m"
+        sidecar.istio.io/proxyMemory: "50Mi"
+        sidecar.istio.io/proxyMemoryLimit: "1Gi"
+        redeployTimestamp: 2026-06-04-19-15
+      revisionHistoryLimit: 1
+      replicaCount: 5
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2000m
+          memory: 2Gi
+        requests:
+          cpu: 1000m
+          memory: 1Gi
+      livenessProbe:
+        enabled: true
+        config:
+          httpGet:
+            path: /livez
+            port: http
+        initialDelaySeconds: 180
+        periodSeconds: 10
+        timeoutSeconds: 30
+        successThreshold: 1
+        failureThreshold: 20
+      readinessProbe:
+        enabled: true
+        path: "/readyz"
+        initialDelaySeconds: 180
+        periodSeconds: 10
+        timeoutSeconds: 30
+        successThreshold: 1
+        failureThreshold: 20
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; wget -qO- "http://localhost:5000/openConnections?terminate=true"; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- "http://localhost:5000/openConnections"); sleep 5; done; wget -qO- "http://localhost:5000/stopServer"; echo "Done";
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 5
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/error-management-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - error-management.celigo.io
+      - error-management.core.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - error-management
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.1.167.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

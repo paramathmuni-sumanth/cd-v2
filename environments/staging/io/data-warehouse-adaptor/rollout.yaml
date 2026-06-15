@@ -1,0 +1,29 @@
+service: data-warehouse-adaptor
+analysis:
+  source: splunk
+  query: >
+    search earliest=-5m
+    index=staging-adaptors
+    k8s.cluster.name=staging-aws-eks-us-east-1
+    k8s.namespace.name=io
+    k8s.container.name=data-warehouse-adaptor
+    k8s.pod.name=*canary*
+    (logName IN ("serverHit", "sh") OR (level IN ("error", "fatal")) OR *unhandled* OR *uncaught* OR *typeerror* OR *fatal*)
+    NOT logName IN ("bulkInsertError", "invalidBigQueryError", "fetchMetadataError", "snowflakeClientConnectionDestroyError", "executeQueryFailed", "bulkLoadQueryFailed", "invalidConfig", "invalidConfigMapFile", "newrelic", "missingEnvVarsInS3Error", "readEnvFileError", "SIGTERMHandler", "snowflakeClientConnectionError", "bulkInsertQueryError", "unhandledRejection", "failedToFetchSTSIdentityInfo", "bulkLoadSplitFilesValidationError")
+    NOT *Warning* NOT "enter AWS SDK for JavaScript"
+    NOT "Error issuing heartbeat call"
+    NOT (wsId=*fatal* OR wsId=*error* OR traceId=*fatal* OR traceId=*error*)
+    | eval fail=if(match(_raw, "(?i)error|fatal|unhandled|uncaught|typeerror"), 1, 0),
+           fatal=if(level="fatal", 1, 0),
+           openConnection=if((logName="serverHit" OR logName="sh") AND oc > 125, 1, 0)
+    | stats sum(fail) as failCount
+            sum(fatal) as fatalCount,
+            sum(openConnection) as openConnectionCount
+    | eval finalResultHolder=case(
+               failCount > 0 OR fatalCount > 0 OR openConnectionCount > 0, "false",
+               true(), "true"
+           )
+    | appendpipe [| stats count | where count==0 | eval failCount=0, fatalCount=0, openConnectionCount=0, finalResultHolder="true" | fields - count]
+    | fields failCount, fatalCount, openConnectionCount, finalResultHolder
+  frequency: 5m
+disabled: false

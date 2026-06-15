@@ -1,0 +1,17 @@
+testing:
+  env:
+    SERVICE: "salesforce-adaptor"
+    CUSTOM_URI: "http://salesforce-adaptor.io.svc.cluster.local"
+    DEPLOYMENT_ENVIRONMENT: "platform4-dev"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "salesforce-adaptor"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 2Gi
+    requests:
+      cpu: 200m
+      memory: 1.5Gi

@@ -1,0 +1,38 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "data-warehouse-adaptor",
+    "namespace": "argocd",
+    "finalizers": [
+      "resources-finalizer.argocd.argoproj.io"
+    ]
+  },
+  "spec": {
+    "project": "io",
+    "source":{
+      "helm":{
+        "valueFiles": [
+        "../../io/data-warehouse-adaptor/microservice.yaml",
+        "../../io/data-warehouse-adaptor/env.yaml"
+        ]
+      },
+      "path": "charts/microservice",
+      "repoURL": "https://github.com/celigo/cd-prod.git",
+      "targetRevision": "production-na"
+    },
+    "destination":{
+      "namespace": "io",
+      "server": "https://kubernetes.default.svc"
+    },
+    "syncPolicy":{
+      "automated":{
+        "prune": true,
+        "selfHeal": true
+      },
+      "syncOptions": [
+        "CreateNamespace=true"
+      ]
+    }
+  }
+}

@@ -1,0 +1,118 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/integrator-workers-ping
+                  - cluster.local/ns/io/sa/api-gateway
+                  - cluster.local/ns/di/sa/di-management-service
+                  - cluster.local/ns/io/sa/js-runtime
+                  - cluster.local/ns/io/sa/internal-gateway
+                  - cluster.local/ns/io/sa/lookup-cache
+                  - cluster.local/ns/core/sa/resource-management
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "flow-management"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1.5
+          memory: 1536Mi
+        requests:
+          cpu: 800m
+          memory: 1Gi
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      livenessProbe:
+        failureThreshold: 15
+      readinessProbe:
+        failureThreshold: 5
+      podAnnotations:
+        redeployTimestamp: 2026-02-05-09-00
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/flow-management-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - flow-management.celigo.io
+      - flow-management.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - flow-management
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    logLevel.json: |
+      {
+        "default": "info",
+        "configPerPod": false
+      }
+  volumes:
+    - name: log-level-config
+      configMap:
+        name: flow-management-config-volume
+  volumeMounts:
+    - mountPath: "/etc/config/"
+      name: log-level-config
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-2.0.0.909.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

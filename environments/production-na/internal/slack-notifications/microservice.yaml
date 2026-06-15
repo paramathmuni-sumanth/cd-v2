@@ -1,0 +1,84 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 860378520032.dkr.ecr.us-east-1.amazonaws.com
+      name: slack-notifications
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 500m
+          memory: 600Mi
+        requests:
+          cpu: 250m
+          memory: 400Mi
+      terminationGracePeriodSeconds: 60
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 4
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  env:
+    NODE_ENV: production
+    aws_region: us-east-1
+    ENVIRONMENT_VARIABLES_S3_BUCKET_NAME: celigo-k8s-production-na-env-vars
+    NEW_RELIC_APP_NAME: production-na-slack-notifications
+    NODE_OPTIONS: --max-old-space-size=250
+    ENV: "production"
+    HOOKS_S3_BUCKET: celigo-k8s-production-na-env-vars
+    HOOKS_S3_FOLDER_PREFIX: "slack-notifications/hooks"
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/slack-notifications-s3-role-k8s-production-na
+  virtualService:
+    enabled: true
+    hosts:
+      - slack-notifications.internal.svc.cluster.local
+      - slack-notifications.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - slack-notifications
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.3.0.5.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

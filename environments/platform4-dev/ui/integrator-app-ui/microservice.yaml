@@ -1,0 +1,286 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "integrator-app-ui"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 500m
+          memory: 250Mi
+        requests:
+          cpu: 100m
+          memory: 150Mi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2024-05-09-11-00
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::846543646911:role/integrator-app-ui-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - '*'
+    gateways:
+      - istio-gateway/istio-in-gw-integ
+    http:
+      - match:
+          - uri:
+              prefix: /internal/ai-testcase-autogeneration
+        route:
+          - destination:
+              host: ai-testcase-autogeneration.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /internal/ai-documentation-generation
+        route:
+          - destination:
+              host: ai-documentation-generation.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /v0/httpmockserver
+        route:
+          - destination:
+              host: httpmockserver.io.svc.cluster.local
+      - match:
+          - uri:
+              prefix: /hello-world
+        route:
+          - destination:
+              host: hello-world.ia.svc.cluster.local
+      - match:
+          - uri:
+              exact: /classifications/errors
+        route:
+          - destination:
+              host: error-classifier-v2.io.svc.cluster.local
+      - match:
+          - method:
+              exact: POST
+            uri:
+              prefix: /signin
+          - method:
+              exact: GET
+            uri:
+              prefix: /csrf
+          - method:
+              exact: POST
+            uri:
+              prefix: /mfa/verify
+          - method:
+              exact: POST
+            uri:
+              prefix: /signout
+          - method:
+              exact: GET
+            uri:
+              prefix: /auth/google/oauth2callback
+          - method:
+              exact: POST
+            uri:
+              prefix: /auth/google
+          - method:
+              regex: "^(GET|POST)$"
+            uri:
+              prefix: /sso
+          - method:
+              regex: "^(GET|POST)$"
+            uri:
+              exact: /reSigninWithGoogle
+          - method:
+              exact: POST
+            uri:
+              exact: /request-reset
+          - method:
+              exact: POST
+            uri:
+              exact: /signup
+          - method:
+              exact: POST
+            uri:
+              exact: /set-initial-password
+          - method:
+              exact: POST
+            uri:
+              exact: /accept-invite
+          - method:
+              exact: POST
+            uri:
+              exact: /accept-invite-metadata
+          - method:
+              exact: POST
+            uri:
+              exact: /reset-password
+          - method:
+              exact: POST
+            uri:
+              exact: /change-email
+          - method:
+              regex: "^(GET|POST)$"
+            uri:
+              prefix: /reSigninWithSSO
+          - method:
+              exact: POST
+            uri:
+              exact: /link/google
+          - method:
+              exact: POST
+            uri:
+              exact: /unlink/google
+          - method:
+              exact: GET
+            uri:
+              exact: /status
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /v1/
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /api/
+          - method:
+              exact: GET
+            uri:
+              regex: '/signin/errors/[^/]+'
+          - method:
+              exact: GET
+            uri:
+              prefix: /token-status
+          - method:
+              exact: GET
+            uri:
+              prefix: /zendesk/widget-auth-token
+          - method:
+              exact: GET
+            uri:
+              prefix: /litmos/sso
+          - uri:
+              prefix: /applications
+          - method:
+              exact: "GET"
+            uri:
+              prefix: /celigouniversity/sso
+          - method:
+              exact: "GET"
+            uri:
+              prefix: "/region/redirect"
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /system/v1
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /netsuite/v1
+          - method:
+              exact: "GET"
+            uri:
+              exact: /publishedHttpConnectors
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /oidc/
+          - method:
+              exact: GET
+            uri:
+              prefix: /.well-known/oauth-authorization-server
+          - method:
+              exact: GET
+            uri:
+              exact: /.well-known/openid-configuration
+          - method:
+              exact: GET
+            uri:
+              prefix: /.well-known/oauth-protected-resource
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /apis/
+          - method:
+              exact: POST
+            uri:
+              regex: "^/i.{9}$"
+          - method:
+              exact: POST
+            uri:
+              regex: "^/e.{9}$"
+        route:
+          - destination:
+              host: api-gateway.io.svc.cluster.local
+      - match:
+          - method:
+              exact: POST
+            uri:
+              exact: /receive
+        route:
+          - destination:
+              host: as2-mock.io.svc.cluster.local
+      - match:
+          - method:
+              exact: POST
+            uri:
+              prefix: /detect_anomalies
+          - method:
+              exact: POST
+            uri:
+              prefix: /detect_anomalies_for_endpoints
+        route:
+          - destination:
+              host: anomaly-detector.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-app-ui
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.103.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

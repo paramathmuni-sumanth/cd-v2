@@ -1,0 +1,25 @@
+service: as2-adaptor
+analysis:
+    source: splunk
+    query: >
+      search earliest=-5m
+      index=production-na-adaptors
+      k8s.namespace.name IN ("IO")
+      k8s.cluster.name=production-na-aws-eks-us-east-1
+      k8s.container.name=as2-adaptor
+      k8s.pod.name=*canary*
+      (logName=onSendResponse OR logName=serverHit OR level IN ("error", "fatal") OR *unhandled* OR *uncaught* OR *TypeError* OR *fatal* NOT *Warning* NOT "enter AWS SDK for JavaScript" NOT "flushDebugStream" NOT "sentMICMismatch" ) 
+      | eval pass=if(sc >= 200 AND sc < 300, 1, 0),
+        fail=if(sc >= 300 OR match(_raw, "(?i)fatal|uncaught|error|TypeError|unhandled"), 1, 0),
+        fatal=if(level="fatal", 1, 0),
+        openConnection=if(logName="serverHit" AND oc > 50, 1, 0)
+      | stats sum(pass) as passCount,    
+        sum(fail) as failCount, 
+        sum(fatal) as fatalCount, 
+        sum(openConnection) as openConnectionCount
+      | eval totalCount = passCount + failCount,
+      finalResultHolder="true"
+      | appendpipe [| stats count | where count==0 | eval passCount=0, failCount=0, fatalCount=0, openConnectionCount=0, totalCount=0, finalResultHolder="true" | fields - count]           
+      | fields passCount, failCount, fatalCount, openConnectionCount, totalCount, finalResultHolder
+    frequency: 5m
+disabled: false

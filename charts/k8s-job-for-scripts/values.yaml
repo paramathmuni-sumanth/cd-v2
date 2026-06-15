@@ -1,0 +1,197 @@
+infra-tasks:
+  global:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: k8s-job-for-scripts
+      pullPolicy: Always
+    secrets: false
+    configmap:
+      name: global-configmap
+      env:
+        K8S_ENVIRONMENT_VARIABLES_S3_BUCKET_NAME: "celigo-k8s-qa-prod-env-vars"
+        INPUTS_JSON_FILE_PATH: "/inputs/scriptInputs.json"
+        NEXT_SCRIPT_WAIT_TIME: "5"
+        DEBUG_SLEEP: "1"
+        GIT_ORG: "celigo"
+    resources:
+      requests:
+        cpu: 500m
+        memory: 500Mi
+    serviceAccount:
+      name: k8s-job-for-scripts
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/k8s-job-for-scripts-s3-role-k8s
+  jobs:
+    - name: jobname #follow micro-services naming convention
+      template: true #keep this as false for non template elements
+      jobType: cronJob #use job for normal job type
+      schedule: "* * * * *" 
+      tag: generic # use dump-scripts-2.0-node18 for dump scripts
+      env:
+        S3_BUCKET_ENV_VARS_FOLDER: "k8s-job-for-scripts"
+        COMMAND_TYPE: "python3"
+      inputs:
+        scriptInputs.json: |
+          [
+            {
+                "SCRIPT_PATH": "sai/test.py",
+                "GIT_REPO": "test"
+                "GIT_BRANCH": "main"
+                "inputs": {}
+            },
+            {
+                "SCRIPT_PATH": "sai/test.py",
+                "GIT_REPO": "test"
+                "GIT_BRANCH": "main"
+                "inputs": {}
+            }
+          ]
+    - name: http-adaptor-custom-hpa
+      template: false
+      jobType: cronJob
+      schedule: "25,55 * * * *"
+      image: custom-hpa
+      tag: min-replica-update
+      env:
+        GIT_REPO: "cd"
+        FILE_PATH: "cd/io/http-adaptor/microservice.yaml"
+        GIT_BRANCH: "qa-prod"
+        S3_BUCKET_ENV_VARS_FOLDER: "k8s-job-for-scripts/custom-hpa"
+        REPLICA_ABSOLUTE_INCREASE: 4
+        MIN_REPLICA_KEY: ".microservice.extraObjects[0].spec.minReplicas"
+        MAX_REPLICA_KEYL: ".microservice.extraObjects[0].spec.maxReplicas"
+    - name: upload-manifest-to-s3
+      template: false
+      jobType: job
+      tag: upload-manifest-to-s3-2.0
+      env:
+        S3_BUCKET: "integrator-qa-prod-ui-resources"
+        CLOUDFRONT_DISTRIBUTION_ID: "E19A5WLQW67HHF"
+        S3_BUCKET_ENV_VARS_FOLDER: "k8s-job-for-scripts/upload-manifest-to-s3"
+        BRANCH: "dev"
+    - name: upload-ui-images
+      template: false
+      jobType: job
+      tag: upload-ui-images-22.11.0
+      env:
+        S3_BUCKET: "integrator-qa-prod-ui-resources"
+        CLOUDFRONT_DISTRIBUTION_ID: "E19A5WLQW67HHF"
+        S3_BUCKET_ENV_VARS_FOLDER: "k8s-job-for-scripts/upload-ui-images"
+    - name: create-update-tpconnectors
+      template: false
+      jobType: job
+      tag: create-update-tpconnectors-2.0
+      env:
+        S3_BUCKET: "integrator-qa-prod-ui-resources"
+        S3_BUCKET_ENV_VARS_FOLDER: "k8s-job-for-scripts/create-update-tpconnectors"
+        SCRIPT_PATH: "scripts/createOrUpdateTpConnectors.js"
+        BRANCH: "staging"
+        BASE_URL: "qaprod.staging.integrator.io"
+      inputs:
+        scriptInputs.json: |
+          [
+          ]
+    - name: compare-env-vars
+      template: false
+      jobType: cronJob
+      schedule: "30 3 * * *"
+      tag: compare-env-vars
+      env:
+        S3_BUCKET_ENV_VARS_FOLDER: "k8s-job-for-scripts/compare-env-vars"
+        SES_SENDER_EMAIL: "staging@celigo.com"
+        SES_RECIPIENT_EMAIL: "devops-ms@celigo.com"
+        AWS_REGION: "ap-south-1"
+        GIT_ORG: "celigo"
+        GIT_REPO_NAME: "cd"
+        GIT_BRANCH: "qa-prod"
+    - name: s3-alerts
+      template: false
+      jobType: cronJob
+      schedule: "0 12 * * *"
+      image: s3-alerts
+      tag: v3
+      env:
+        AWS_REGION: ap-south-1
+        ATHENA_WORKGROUP: access_logs_workgroup
+        ATHENA_DATABASE: access_logs
+        RAW_TABLE_NAME: s3_access_logs_raw
+        RAW_LOCATION: s3://celigo-qa-prod-access-logs/s3/689472371083/ap-south-1
+        RAW_STORAGE_TEMPLATE: 's3://celigo-qa-prod-access-logs/s3/689472371083/ap-south-1/${bucket}/${timestamp}'
+        RAW_TIMESTAMP_RANGE_START: 2024/01/01
+        ICEBERG_TABLE_NAME: s3_access_logs
+        ICEBERG_LOCATION: s3://celigo-qa-prod-access-logs/athena/iceberg/s3_access_logs/
+        SOURCE_BUCKET_FILTER: integrator-qa-prod-userdata-delete-30
+        INTERVAL_HOURS: 24
+        SES_FROM: staging+s3alerts@celigo.com
+        SES_TO: devops-ms@celigo.com
+        MAX_FILES_PER_INSERT: 1200
+        MIN_OBJECT_AGE_SECONDS: 60
+        RETENTION_DAYS: 30
+    - name: s3-alerts-integrator-qa-prod-scripts
+      template: false
+      jobType: cronJob
+      schedule: "0 12 * * *"
+      image: s3-alerts
+      tag: v3
+      env:
+        AWS_REGION: ap-south-1
+        ATHENA_WORKGROUP: access_logs_workgroup
+        ATHENA_DATABASE: access_logs
+        RAW_TABLE_NAME: s3_access_logs_raw
+        RAW_LOCATION: s3://celigo-qa-prod-access-logs/s3/689472371083/ap-south-1
+        RAW_STORAGE_TEMPLATE: 's3://celigo-qa-prod-access-logs/s3/689472371083/ap-south-1/${bucket}/${timestamp}'
+        RAW_TIMESTAMP_RANGE_START: 2024/01/01
+        ICEBERG_TABLE_NAME: s3_access_logs_integrator_qa_prod_scripts
+        ICEBERG_LOCATION: s3://celigo-qa-prod-access-logs/athena/iceberg/s3_access_logs_integrator_qa_prod_scripts/
+        SOURCE_BUCKET_FILTER: integrator-qa-prod-scripts
+        INTERVAL_HOURS: 24
+        SES_FROM: staging+s3alerts@celigo.com
+        SES_TO: devops-ms@celigo.com
+        MAX_FILES_PER_INSERT: 1200
+        MIN_OBJECT_AGE_SECONDS: 60
+        RETENTION_DAYS: 15
+    - name: splunk-ingestion-controller
+      template: false
+      jobType: cronJob
+      schedule: "0 * * * *"
+      tag: splunk-ingestion-controller
+      clusterRole:
+      - apiGroups: [""]
+        resources: ["namespaces"]
+        verbs: ["get", "patch"]
+      env:
+        S3_BUCKET_ENV_VARS_FOLDER: "k8s-job-for-scripts"
+        IO_ENV_NAME: "QA-Prod"
+        SES_REGION: "ap-south-1"
+        SES_SENDER_EMAIL: "staging@celigo.com"
+        SES_RECEIVER_EMAIL: "splunk-overage-alerts@celigo.com,devops-ms@celigo.com"
+        USAGE_THRESHOLD: "20"
+        SPLUNK_INDEX: "qa-prod"
+    - name: enterprise-efs-logs-cleanup
+      template: false
+      jobType: cronJob
+      schedule: "0 */6 * * *"
+      tag: enterprise-logs-cleanup-v1
+      PersistentVolumeClaims:
+      - name: enterprise-efs-logs-cleanup-nfs-pvc
+        accessModes:
+        - ReadWriteMany
+        storage: 5Gi
+        storageClassName: efs-sc-enterprise-logs
+      volumes:
+      - name: enterprise-efs-logs-nfs-storage
+        persistentVolumeClaim:
+          claimName: enterprise-efs-logs-cleanup-nfs-pvc
+      volumeMounts:
+      - name: enterprise-efs-logs-nfs-storage
+        mountPath: /mnt/efs
+      env:
+        EFS_LOGGING_DIR: /mnt/efs/enterprise-logging
+        RETENTION_DAYS: "30.25"
+        PARALLEL_THREADS: "4"
+        DRY_RUN: "false"
+        DEBUG_SLEEP: "1"
+        LOG_FILE: /tmp/enterprise-logs-cleanup.log
+      inputs:
+        scriptInputs.json: |
+          {}

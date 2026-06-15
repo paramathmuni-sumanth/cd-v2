@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/mtls-cert-alert-s3-role-k8s-production-na
+  name: mtls-cert-alert-serviceaccount
+  namespace: default

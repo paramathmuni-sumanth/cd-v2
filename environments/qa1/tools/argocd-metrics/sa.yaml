@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/aws-metrics-access-role
+  name: argocd-metrics-serviceaccount
+  namespace: default

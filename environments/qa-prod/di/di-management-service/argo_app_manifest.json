@@ -1,0 +1,38 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "di-management-service",
+    "namespace": "argocd",
+    "finalizers": [
+      "resources-finalizer.argocd.argoproj.io"
+    ]
+  },
+  "spec": {
+    "project": "di",
+    "source": {
+      "helm": {
+        "valueFiles": [
+          "../../di/di-management-service/microservice.yaml",
+          "../../di/di-management-service/env.yaml"
+        ]
+      },
+      "path": "charts/microservice",
+      "repoURL": "https://github.com/celigo/cd.git",
+      "targetRevision": "qa-prod"
+    },
+    "destination": {
+      "namespace": "di",
+      "server": "https://kubernetes.default.svc"
+    },
+    "syncPolicy": {
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "syncOptions": [
+        "CreateNamespace=true"
+      ]
+    }
+  }
+}

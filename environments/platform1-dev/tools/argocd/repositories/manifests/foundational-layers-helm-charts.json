@@ -1,0 +1,7 @@
+{
+  "type": "helm",
+  "repo": "https://raw.githubusercontent.com/celigo/foundational-layers-helm-charts/gh-pages/",
+  "name": "foundational-layers",
+  "username": "",
+  "password": ""
+}

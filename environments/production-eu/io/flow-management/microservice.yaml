@@ -1,0 +1,180 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/api-gateway
+                  - cluster.local/ns/io/sa/internal-gateway
+                  - cluster.local/ns/di/sa/di-management-service
+                  - cluster.local/ns/io/sa/lookup-cache
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/core/sa/integrator-system-workers
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "flow-management"
+    subscriptionType:
+      enabled: false
+    deployment:
+      livenessProbe:
+        failureThreshold: 15
+      readinessProbe:
+        failureThreshold: 5
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1.7
+          memory: 2048Mi
+        requests:
+          cpu: 1.3
+          memory: 1500Mi
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 10
+        maxReplicas: 25
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+        behavior:
+          scaleDown:
+            stabilizationWindowSeconds: 600
+            policies:
+              - type: Percent
+                value: 10
+                periodSeconds: 120
+            selectPolicy: Max
+          scaleUp:
+            stabilizationWindowSeconds: 90
+            policies:
+              - type: Percent
+                value: 25
+                periodSeconds: 60
+            selectPolicy: Max
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      outlierDetection:
+        maxEjectionPercent: 0
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/flow-management-s3-role-k8s-production-eu
+  virtualService:
+    enabled: true
+    hosts:
+      - flow-management.celigo.io
+      - flow-management.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - flow-management
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    logLevel.json: |
+      {
+        "default": "info",
+        "configPerPod": false
+      }
+  volumes:
+    - name: log-level-config
+      configMap:
+        name: flow-management-config-volume
+  volumeMounts:
+    - mountPath: "/etc/config/"
+      name: log-level-config
+  deployments:
+    - name: app-cloudops-16289
+      env:
+        s3_connection_timeout: "60000"
+        s3_max_sockets: "250"
+      deployment:
+        image:
+          tag: 2026.5.2-patch-2.0.0.574.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 4
+          maxReplicas: 15
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - uri:
+              regex: '/api/flows/[^/]+/[^/]+/retry'
+            method:
+              exact: POST
+          - uri:
+              regex: '/v1/flows/[^/]+/[^/]+/retry'
+            method:
+              exact: POST
+    - name: app-cloudops-12682
+      env:
+        s3_connection_timeout: "60000"
+        s3_max_sockets: "250"
+      deployment:
+        image:
+          tag: 2026.5.2-patch-2.0.0.574.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 4
+          maxReplicas: 15
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - uri:
+              regex: '/api/flows/[^/]+/[^/]+/errors'
+            method:
+              exact: GET
+          - uri:
+              regex: '/api/flows/[^/]+/[^/]+/resolved'
+            method:
+              exact: GET
+          - uri:
+              regex: '/api/flows/[^/]+/[^/]+/resolved'
+            method:
+              exact: PUT
+    - name: app
+      deployment:
+        image:
+          tag: 2026.5.2-patch-2.0.0.574.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

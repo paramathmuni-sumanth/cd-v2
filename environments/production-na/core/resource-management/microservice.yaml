@@ -1,0 +1,230 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/api-gateway
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/io/sa/gptverse
+                  - cluster.local/ns/io/sa/internal-gateway
+                  - cluster.local/ns/di/sa/di-management-service
+                  - cluster.local/ns/di/sa/data-catalog-service
+                  - cluster.local/ns/io/sa/lookup-cache
+                  - cluster.local/ns/ui/sa/integrator-bff
+                  - cluster.local/ns/core/sa/streaming-service
+                  - cluster.local/ns/io/sa/agent-management-service
+                  - cluster.local/ns/io/sa/audit-service
+                  - cluster.local/ns/io/sa/ai-agent-executor
+                  - cluster.local/ns/core/sa/integrator-system-workers
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "resource-management"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2.2
+          memory: 2.5Gi
+        requests:
+          cpu: 1.2
+          memory: 2Gi
+      terminationGracePeriodSeconds: 300
+      livenessProbe:
+        failureThreshold: 10
+        config:
+          exec:
+            command:
+              - /bin/bash
+              - /opt/docker/probe-scripts/probe.sh
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 10
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 5
+        maxReplicas: 28
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      outlierDetection:
+        maxEjectionPercent: 0
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/resource-management-s3-role-k8s-production-na
+  virtualService:
+    enabled: true
+    hosts:
+      - resource-management.celigo.io
+      - resource-management.core.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - resource-management
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  PersistentVolumeClaims:
+    - name: resource-management-cpu-profiling-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-resource-management-cpu-profiling
+  configVolume:
+    probe-config.json: |
+      {
+        "DUMP_ENABLED": true,
+        "HEAP_DUMP_THRESHOLD": 3,
+        "HEAP_DUMP_ENABLED": false,
+        "MAX_PERF_DUMP_PER_HOUR": 1
+      }
+  volumes:
+    - name: probe-config-volume
+      configMap:
+        name: resource-management-config-volume
+    - name: resource-management-cpu-profiling-volume
+      persistentVolumeClaim:
+        claimName: resource-management-cpu-profiling-pvc
+  volumeMounts:
+    - mountPath: /service-core-dumps
+      name: resource-management-cpu-profiling-volume
+    - mountPath: /opt/probe-config
+      name: probe-config-volume
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app-cloudops-7785
+      deployment:
+        image:
+          tag: 2026.5.3-patch-0.0.1.1734.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 3
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - uri:
+              prefix: /api/shared/ashares
+            method:
+              exact: GET
+    - name: ilm-routes-app
+      deployment:
+        image:
+          tag: 2026.5.3-patch-0.0.1.1734.0
+        livenessProbe:
+          enabled: true
+          config:
+            httpGet:
+              path: /livez
+              port: http
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 10
+        resources:
+          limits:
+            cpu: 2.5
+            memory: 3Gi
+          requests:
+            cpu: 2
+            memory: 2.5Gi
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 3
+          maxReplicas: 8
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - uri:
+              regex: '/v1/integrations/[^/]+/revisions/[^/]+/revert/compare'
+            method:
+              exact: POST
+          - uri:
+              regex: '/api/integrations/[^/]+/revisions/[^/]+/revert/compare'
+            method:
+              exact: POST
+          - uri:
+              regex: '^/api/integrations/[^/]+/(clonefamily|revisions|iLMIgnore)$'
+            method:
+              exact: GET
+          - uri:
+              regex: '^/api/integrations/[^/]+/revisions/[^/]+$'
+            method:
+              exact: GET
+          - uri:
+              regex: '^/api/integrations/[^/]+/revisions/[^/]+/(diff|errors)$'
+            method:
+              exact: GET
+          - uri:
+              regex: '^/api/integrations/[^/]+/pull/[^/]+/(compare|open)$'
+            method:
+              exact: POST
+          - uri:
+              regex: '^/api/integrations/[^/]+/revisions/[^/]+/(cancel|installSteps)$'
+            method:
+              exact: POST
+          - uri:
+              regex: '^/api/integrations/[^/]+/revisions/(cancel|create)$'
+            method:
+              exact: POST
+          - uri:
+              regex: '^/api/integrations/[^/]+/revisions/[^/]+/revert/(compare|open)$'
+            method:
+              exact: POST
+    - name: v1-app
+      deployment:
+        image:
+          tag: 2026.5.3-patch-0.0.1.1734.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 5
+          maxReplicas: 10
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - uri:
+              prefix: '/v1/'
+    - name: app
+      deployment:
+        image:
+          tag: 2026.5.3-patch-0.0.1.1734.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

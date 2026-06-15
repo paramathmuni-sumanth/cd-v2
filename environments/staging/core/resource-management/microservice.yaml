@@ -1,0 +1,181 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/api-gateway
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/io/sa/integrator-workers-ping
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/io/sa/gptverse
+                  - cluster.local/ns/io/sa/internal-gateway
+                  - cluster.local/ns/di/sa/di-management-service
+                  - cluster.local/ns/di/sa/data-catalog-service
+                  - cluster.local/ns/io/sa/lookup-cache
+                  - cluster.local/ns/ui/sa/integrator-bff
+                  - cluster.local/ns/core/sa/streaming-service
+                  - cluster.local/ns/io/sa/agent-management-service
+                  - cluster.local/ns/io/sa/audit-service
+                  - cluster.local/ns/io/sa/ai-agent-executor
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "resource-management"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2.3
+          memory: 2.5Gi
+        requests:
+          cpu: 1.4
+          memory: 2Gi
+      terminationGracePeriodSeconds: 600
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      podAnnotations:
+        redeployTimestamp: 2026-04-07-12-00
+      livenessProbe:
+        failureThreshold: 10
+        config:
+          exec:
+            command:
+              - /bin/bash
+              - /opt/docker/probe-scripts/probe.sh
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 10
+    podDisruptionBudget:
+      enabled: true
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 25
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+        behavior:
+          scaleDown:
+            stabilizationWindowSeconds: 600
+            policies:
+              - type: Percent
+                value: 10
+                periodSeconds: 60
+          scaleUp:
+            stabilizationWindowSeconds: 0
+            policies:
+              - type: Percent
+                value: 100
+                periodSeconds: 15
+              - type: Pods
+                value: 4
+                periodSeconds: 15
+            selectPolicy: Max
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::609704034070:role/resource-management-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - resource-management.celigo.io
+      - resource-management.core.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - resource-management
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  PersistentVolumeClaims:
+    - name: resource-management-cpu-profiling-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-resource-management-cpu-profiling
+  configVolume:
+    probe-config.json: |
+      {
+        "DUMP_ENABLED": true,
+        "HEAP_DUMP_THRESHOLD": 3,
+        "HEAP_DUMP_ENABLED": false,
+        "MAX_PERF_DUMP_PER_HOUR": 1
+      }
+  volumes:
+    - name: probe-config-volume
+      configMap:
+        name: resource-management-config-volume
+    - name: resource-management-cpu-profiling-volume
+      persistentVolumeClaim:
+        claimName: resource-management-cpu-profiling-pvc
+  volumeMounts:
+    - mountPath: /service-core-dumps
+      name: resource-management-cpu-profiling-volume
+    - mountPath: /opt/probe-config
+      name: probe-config-volume
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app-celigo-agent
+      deployment:
+        image:
+          tag: 2026.5.3-patch-0.0.1.1734.0
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              x-celigo-version:
+                exact: ora-1.0.0
+    - name: app
+      deployment:
+        image:
+          tag: 2026.5.4-patch-0.0.1.1768.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

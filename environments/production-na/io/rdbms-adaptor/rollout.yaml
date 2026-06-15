@@ -1,0 +1,28 @@
+service: rdbms-adaptor
+analysis:
+  source: splunk
+  query: >
+    search earliest=-7m
+    index="production-na-adaptors"
+    k8s.cluster.name=production-na-aws-eks-us-east-1
+    k8s.namespace.name=io
+    k8s.container.name=rdbms-adaptor
+    k8s.pod.name=*canary*
+    (logName=serverHit OR (level IN ("error", "fatal")) OR *unhandled* OR *uncaught* OR *typeerror* OR *fatal*)
+    NOT logName IN ("isIpPresentInSubnet", "invalidConfig", "invalidConfigMapFile", "newrelic", "unexpectedExportError")
+    NOT *Warning* NOT "enter AWS SDK for JavaScript" NOT "Error in customInitState"
+    NOT wsId=*fatal* NOT reqId=*fatal* NOT wsId=*error* NOT reqId=*error* NOT "Connection lost - unexpected end of message stream"
+    | eval fail=if(match(_raw, "(?i)error|fatal|unhandled|uncaught|typeerror"), 1, 0),
+           fatal=if(level="fatal", 1, 0),
+           openConnection=if(logName="serverHit" AND oc > 500, 1, 0)
+    | stats sum(fail) as failCount
+            sum(fatal) as fatalCount, 
+            sum(openConnection) as openConnectionCount
+    | eval finalResultHolder=case(
+               failCount > 5 OR fatalCount > 0 OR openConnectionCount > 0, "false",
+               true(), "true"
+           )
+    | appendpipe [| stats count | where count==0 | eval failCount=0, fatalCount=0, openConnectionCount=0, finalResultHolder="true" | fields - count]
+    | fields failCount, fatalCount, openConnectionCount, finalResultHolder
+  frequency: 7m
+disabled: false

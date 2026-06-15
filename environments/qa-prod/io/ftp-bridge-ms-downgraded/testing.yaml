@@ -1,0 +1,16 @@
+testing:
+  env:
+    SERVICE: "ftp-bridge-ms-downgraded"
+    CUSTOM_URI: "http://ftp-bridge-ms-downgraded.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "ftp-bridge-ms-downgraded"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

@@ -1,0 +1,14 @@
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: integrator-workers-access-logs
+  namespace: io
+spec:
+  selector:
+    matchLabels:
+      app: integrator-workers
+  accessLogging:
+    - providers:
+      - name: access-log-provider
+      filter:
+        expression: response.code >= 300

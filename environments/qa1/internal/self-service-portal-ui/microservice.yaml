@@ -1,0 +1,197 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/internal/sa/self-service-portal
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: self-service-portal-ui
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 500m
+          memory: 500Mi
+        requests:
+          cpu: 250m
+          memory: 250Mi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2024-05-09-11-00
+      gracefulShutDown:
+        enabled: false
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/self-service-portal-ui-s3-role-k8s
+  virtualService:
+    enabled: true
+    gateways:
+      - istio-gateway/self-service-portal
+    hosts:
+      - ssp.devops.staging.integrator.io
+    http:
+      - match:
+          - uri:
+              prefix: /vulnerabilities/auth/callback
+        rewrite:
+          uri: /api/v1/auth/callback
+        route:
+          - destination:
+              host: vulnerability-mgmt-api.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /vulnerabilities/docs
+        rewrite:
+          uri: /docs
+        route:
+          - destination:
+              host: vulnerability-mgmt-api.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /vulnerabilities/redoc
+        rewrite:
+          uri: /redoc
+        route:
+          - destination:
+              host: vulnerability-mgmt-api.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /vulnerabilities/openapi.json
+        route:
+          - destination:
+              host: vulnerability-mgmt-api.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              exact: /vulnerabilities/health
+        rewrite:
+          uri: /health
+        route:
+          - destination:
+              host: vulnerability-mgmt-api.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /vulnerabilities/api/
+          - uri:
+              exact: /vulnerabilities/api
+        rewrite:
+          uri: /api/
+        route:
+          - destination:
+              host: vulnerability-mgmt-api.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              exact: /vulnerabilities/config
+        rewrite:
+          uri: /config
+        route:
+          - destination:
+              host: vulnerability-mgmt-ui.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /vulnerabilities/
+          - uri:
+              exact: /vulnerabilities
+        rewrite:
+          uri: /
+        route:
+          - destination:
+              host: vulnerability-mgmt-ui.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /api
+        route:
+          - destination:
+              host: self-service-portal.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /_next/
+            headers:
+              referer:
+                regex: ".*/vulnerabilities.*"
+        route:
+          - destination:
+              host: vulnerability-mgmt-ui.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              exact: /config
+            headers:
+              referer:
+                regex: ".*/vulnerabilities.*"
+        rewrite:
+          uri: /runtime-config
+        route:
+          - destination:
+              host: vulnerability-mgmt-ui.internal.svc.cluster.local
+              subset: app
+      - match:
+          - uri:
+              prefix: /
+        route:
+          - destination:
+              host: self-service-portal-ui.internal.svc.cluster.local
+              subset: app
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - self-service-portal-ui
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: branch-management-fb-1.0.0.12.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

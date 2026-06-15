@@ -1,0 +1,10 @@
+apiVersion: v2
+name: infra-tasks
+type: application
+version: 0.1.12
+appVersion: "1.0.0"
+dependencies:
+- name: infra-tasks
+  version: 0.1.12
+  repository: https://raw.githubusercontent.com/celigo/helm-charts/gh-pages/
+

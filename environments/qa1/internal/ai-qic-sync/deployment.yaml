@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-qic-sync
+  namespace: internal
+  labels:
+    app: ai-qic-sync
+    app.kubernetes.io/name: ai-qic-sync
+    app.kubernetes.io/component: sync-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-qic-sync
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ai-qic-sync
+        app.kubernetes.io/name: ai-qic-sync
+    spec:
+      serviceAccountName: ai-qic
+      containers:
+        - name: sync-service
+          image: 341118756977.dkr.ecr.ap-south-1.amazonaws.com/ai-qic:ml-1.0.0.500.0
+          command: ["node", "workers/sync-worker.js"]
+          ports:
+            - name: health
+              containerPort: 3335
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: cd
+            - name: aws_region
+              value: ap-south-1
+            - name: ENVIRONMENT_VARIABLES_S3_BUCKET_NAME
+              value: celigo-k8s-qa-env-vars
+            - name: SYNC_HEALTH_PORT
+              value: "3335"
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=384
+            - name: NEW_RELIC_APP_NAME
+              value: qa1-ai-qic-sync
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3335
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3335
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      terminationGracePeriodSeconds: 30

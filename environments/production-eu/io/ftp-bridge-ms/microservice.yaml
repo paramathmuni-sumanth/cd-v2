@@ -1,0 +1,215 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/io/sa/endpoint-service
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /ftp-bridge-ms/metrics
+  common:
+    image:
+      repository: 860378520032.dkr.ecr.us-east-1.amazonaws.com
+      name: ftp-bridge-ms
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 8080
+      podAnnotations:
+        celigo.io/scrape: 'fast'
+        celigo.io/path: "/ftp-bridge-ms/metrics"
+      resources:
+        limits:
+          cpu: 2824m
+          memory: 6000Mi
+        requests:
+          cpu: 600m
+          memory: 4096Mi
+      livenessProbe:
+        enabled: true
+        config:
+          httpGet:
+            path: /ftp-bridge-ms/livez
+      readinessProbe:
+        enabled: true
+        path: "/ftp-bridge-ms/readyz"
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" == "$expected" ]; do count=$(wget -qO- 'http://localhost:8080/ftp-bridge-ms/openConnections?preStopMode=true'); sleep 1; if [ "$count" == "$expected" ]; then for i in seq 1 5; do count=$(wget -qO- 'http://localhost:8080/ftp-bridge-ms/openConnections?terminate=true'); sleep 5; done; fi; done; catalina.sh stop;
+      terminationGracePeriodSeconds: 86400
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 3
+        maxReplicas: 15
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      outlierDetection:
+        maxEjectionPercent: 0
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/ftp-bridge-ms-s3-role-k8s-production-eu
+  virtualService:
+    enabled: true
+    hosts:
+      - ftp-bridge-ms.io.svc.cluster.local
+      - ftp-bridge-ms.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - ftp-bridge-ms
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    log4j2.properties: |
+      status = error
+      name = PropertiesConfig
+      appenders = console
+      customLevel.ACTIVE_MODE_DEBUG = 425
+      customLevel.CUSTOM_DEBUG = 450
+      customLevel.JSCH_DEBUG = 475
+      loggers = awss3, awstransfer
+      appender.console.type = Console
+      appender.console.name = LogToConsole
+      appender.console.layout.type = PatternLayout
+      appender.console.layout.pattern = %d{ISO8601} %-5p (%13F:%L) - %m%n
+      logger.awss3.name = software.amazon.awssdk.services.s3
+      logger.awss3.level = ${env:DEPLOYMENT_SPECIFIC_S3_LOG_LEVEL:-info}
+      logger.awss3.additivity = false
+      logger.awss3.appenderRef.console.ref = LogToConsole
+      logger.awstransfer.name = software.amazon.awssdk.transfer
+      logger.awstransfer.level = ${env:DEPLOYMENT_SPECIFIC_S3_LOG_LEVEL:-info}
+      logger.awstransfer.additivity = false
+      logger.awstransfer.appenderRef.console.ref = LogToConsole
+      rootLogger.level = ${env:DEPLOYMENT_SPECIFIC_LOG_LEVEL:-info}
+      rootLogger.additivity = false
+      rootLogger.appenderRef.console.ref = LogToConsole
+      monitorInterval = 60
+    newRelic.json: |
+      {
+        "enableNR": true,
+        "transactions": ["all"],
+        "userIds": [],
+        "expOrImpIds": [],
+        "connectionIds": []
+      }
+  volumes:
+    - name: ftp-bridge-ms-config
+      configMap:
+        name: ftp-bridge-ms-config-volume
+  volumeMounts:
+    - name: ftp-bridge-ms-config
+      mountPath: /etc/config
+  deployments:
+    - name: java21-current-rollout-app
+      deployment:
+        image:
+          tag: java-21-fb-0.0.1.132.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 3
+          maxReplicas: 5
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(63b87e3a711fd63ea733c593|62bc5c3b2e20fc48184e0dcc|621f7ae62be9db4b2752d179|6320a65c71fbb44ef535d8b3|62a31921c1caac5c975b093d|5fe1197c0a07a651aa461bd4|639086d859666a16744fc42e|673db750065a8fc6f58428cd|628cacba76ed8f537fc85817|64d0e47a05910523743caf85|5e78fa87f744cd1d0b0c1d03|62460115c47b44399abdae8d|604916f89716277b7a653731|642ae0b1d3ea8364a55d8fb1|65b2444382d431067c24af1e|6745cfdbfa2b41d5309c0c38|62d5b62d36441462eb3b6b50|6841babd79a66cf9e0386502|63c82fafac07084e45bcf66c|62628c9e92a62f42203ce7f1|610044f421923b1a14889f1c|66d0477cb66bdfa497834318|655dc4433698507f1895d897|697a67c1ea84232a264737c9|61374a9fd72abf5f4f5957a8|62e2866233227851f35f5130|659bd1606afb3c0860ac9f9a|60551857056ffb6631580f1b|629a2bf59be8184eb46f3ded|5f8dbd6527e76c37f117fa85|64466bfc86eb6f042248391c|6013cbadec36e31f12bd8454|636d2fb04e22961b9344915d|61923e0bee5c8b4543e96809|666008895df2b99ce160452f|64e73c0d0686826133f78a8b|5ff1905d0a07a651aa480cc7|66575a8672405dbd59b87bed|63e6918a08e08d227415cc66|62d7998733227851f35e2650)$'
+          - headers:
+              userid:
+                regex: '^(666a947b18b2b03be48b2027|655f3a49de8139270a8d0f62|64394d6af75f5e22c7eb814b|66597272456cfb63eb2a5ccd|64cbc95d0beb5951507e9b62|60c740142bc4d33f0e686a11|66f10d7c10428aac480a929a|5fd3fa970a07a651aa444e69|62ea685133227851f3602e79|6410532f789a4412b5217106|642421906045224f8b8a914a|683e7b12643384484d3857ff|6256a57c9f52cc4665df960f|63fd0775ef270b4e80e2c7ce|6064883e36af2a260b83d4bf|669e54a946cc8f1df7241bd1|642abd2ad3b01e38dd6ceb12|660662c38edad6ba0ef00692|60c8970e83fcf958223d1b71|63037f9ba527d631fa7c528c|67221b37fcb55f9c0c9c6ff3|63e2783a0d5bd953ca22a97e|68a8655af2ed07ea702f3915|64ba4c78722db6798f73af75|636285219fe28779b9f3a10e|605e69d7bb22cf0f54bd43b7|631b0c0d1de64360275e0397|62978df54e0afa4e7fc1a719|67766d37fa2b41d530dc30e1|618c407ade5c7339eaca5df2|62eaac9536441462eb3db004|65ea1daf93275d90008f6266|6495c001b11ddc0153b28221|657d469819d6e8a7163640e0|67e54d2c6018e898e22ff45b|5fceb37852fb695512df9352|64e8c0e70686826133f79e97|6989c8019143fa398d75a3fe|6256dfb3e16adb40a928361d|60c939b629eb4256e53a4e4c)$'
+          - headers:
+              userid:
+                regex: '^(888888888888888888888888|644662c23658154b887ac943|64121564671f0d6fd72e05fc|6407353e1014ab6077bf5a0f|674625b1d18ca8c4e8cf095a|64071100789a4412b5213187|64a585076252d532c91beaaa|6435416c5aab382d2ac21491|64f0bd462d99900d28c2eca1|6512a2d17031896e2aea2b8f|65ea8d1b9c8d125207f8f825|66deb13a3cab0909d2b791ea|64e767610686826133f79246|64351986b65e955c90215e7c|64a57fae6252d532c91bea2f|64b105b89ef7334338d0ad21|646ca8c4705f31316f41aa83|64a52de234e94d54d401f4d6|64352cdff75f5e22c7eb52cd|654a509fd1aa0ca263da067f|64a532f10cb87c754eb8de22|65f140dc5944a5559f055846|5e817bcb5e764130d7a2ceb5|66964e84d8ead74aac472c88|67adffe80107610a5cbbf6dd|629694e44e0afa4e7fc17904|6273e143569b47462e651b67|65ca3f5ed7db3370cc2a063f|622f3b9f096fc474c2f36751|67f4c50b5c0a39b2a1704771|66269389398d1ff911238401|67adcc5087ab0c72bf1ca5f0|63e0de672b677821bee906fc|63e279342b677821bee9c065|600854808421120b301537df|64a53c4c0cb87c754eb8df61|676511a38207540cfd5de745|60b6f1c52bc4d33f0e65775c)$'
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.1.87.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 3
+          maxReplicas: 15
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="ftp-bridge-ms-app"})
+                threshold: "60"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

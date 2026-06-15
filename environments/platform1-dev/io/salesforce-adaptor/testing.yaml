@@ -1,0 +1,10 @@
+testing:
+  env:
+    SERVICE: "salesforce-adaptor"
+    CUSTOM_URI: "http://salesforce-adaptor.io.svc.cluster.local"
+    DEPLOYMENT_ENVIRONMENT: "platform1-dev"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "salesforce-adaptor"
+    pullPolicy: Always
+    tag: ""

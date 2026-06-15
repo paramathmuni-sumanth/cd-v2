@@ -1,0 +1,292 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/testing/sa/loadtesting
+                  - cluster.local/ns/core/sa/api-execution
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /metrics
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "netsuite-distributed-adaptor"
+    subscriptionType:
+      enabled: true
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2.5
+          memory: 1.2Gi
+        requests:
+          cpu: 1.5
+          memory: 0.7Gi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2026-10-06-10-40
+        celigo.io/scrape: 'true'
+      livenessProbe:
+        enabled: true
+        failureThreshold: 6
+      readinessProbe:
+        enabled: true
+        failureThreshold: 3
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 4
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/netsuite-distributed-adaptor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - netsuite-distributed-adaptor.celigo.io
+      - netsuite-distributed-adaptor.io.svc.cluster.local
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - netsuite-distributed-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  PersistentVolumeClaims:
+    - name: nsda-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-enterprise-logs
+  volumes:
+    - name: nsda-nfs-storage
+      persistentVolumeClaim:
+        claimName: nsda-nfs-pvc
+  volumeMounts:
+    - mountPath: "/mnt/efs"
+      name: nsda-nfs-storage
+  deployments:
+    - name: di-load-testing
+      env:
+        LOAD_TEST_ENABLED: "true"
+      deployment:
+        image:
+          tag: ml-0.0.1.182.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 15
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="netsuite-distributed-adaptor-di-load-testing"})
+                threshold: "600"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 60
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 180
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(69294c9778c4ecbf474cc6c4|66100b4d8acb5469cd7bd77b|68fdc933eb46b48cf712d41d|690acb52d80265b9f3733e30|690b27730e9b2e090bcf2201|69d1531e51a6e580a1125154|69d1541f51a6e580a1125337|69d154c09df81177cd3b6652|69d1558d51a6e580a112562b|69d1564e51a6e580a11257fa|69d1582a51a6e580a1125b69|69d158d29df81177cd3b6e03|69d159699df81177cd3b6f5d)$'
+      sidecar:
+        enabled: true
+        inboundConnectionPool:
+          tcp:
+            maxConnections: 800
+    - name: max-connection
+      env:
+        LOAD_TEST_ENABLED: "true"
+      deployment:
+        image:
+          tag: ml-0.0.1.201.0
+        replicaCount: 1
+      hpa:
+        keda:
+          enabled: false
+          minReplicas: 1
+          maxReplicas: 1
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="netsuite-distributed-adaptor-max-connection"})
+                threshold: "10"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 60
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 180
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(63ad2faca37ca676e1aa5da2)$'
+      sidecar:
+        enabled: true
+        inboundConnectionPool:
+          tcp:
+            maxConnections: 20
+    - name: app
+      deployment:
+        image:
+          tag: api-erp-fb-0.0.1.102.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 5
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="netsuite-distributed-adaptor-app"})
+                threshold: "100"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 60
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 180
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+      sidecar:
+        enabled: true
+        inboundConnectionPool:
+          tcp:
+            maxConnections: 800

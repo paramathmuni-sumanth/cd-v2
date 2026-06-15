@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "amazon-netsuite-connector"
+    CUSTOM_URI: "http://amazon-netsuite-connector.ia.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "amazon-netsuite-connector"
+    pullPolicy: Always
+    tag: ""

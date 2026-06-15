@@ -1,0 +1,16 @@
+testing:
+  env:
+    SERVICE: "aut-connectormockserver"
+    CUSTOM_URI: "http://aut-connectormockserver.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "aut-connectormockserver"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

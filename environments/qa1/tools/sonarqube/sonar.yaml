@@ -1,0 +1,21 @@
+edition: "community"
+image:
+  repository: sonarqube
+  tag: 9.6.1-{{ .Values.edition }}
+  pullPolicy: IfNotPresent
+service:
+  type: NodePort
+
+persistence:
+  enabled: true
+  storageClass: ebs-sc
+  size: 20Gi
+
+postgresql:
+  enabled: true
+  persistence:
+    enabled: true
+    storageClass: ebs-sc
+    size: 20Gi
+    
+  

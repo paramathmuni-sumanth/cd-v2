@@ -1,0 +1,167 @@
+infra-tasks:
+  global:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: infra-tasks
+      pullPolicy: Always
+    secrets: false
+    configmap:
+      name: global-configmap
+      env:
+        GITHUB_ORG: "celigo"
+        REPO_NAME: "infra-db-scripts"
+        LOGS_BUCKET_NAME: celigo-k8s-qa-prod-infra-tasks
+        INFRA_TASKS_ENVIRONMENT_VARIABLES_S3_BUCKET_NAME: celigo-k8s-qa-prod-env-vars
+        ENVIRONMENT_VARIABLES_S3_BUCKET_NAME: qa-prod-environment-variables
+        S3_BUCKET_ENV_VARS_FOLDER: infra-tasks
+        DB_VARS: DB_VARS
+        BOT_MAIL: bot_mail
+        BOT_USER: bot_user
+        GIT_OPS_GITHUB_ORG: celigo
+        GIT_OPS_REPO_NAME: cd
+        GIT_OPS_BRANCH: qa-prod
+        NODE_ENV: "staging"
+        LOGS_FREQUENCY: "600"
+    resources:
+      requests:
+        cpu: 200m
+        memory: 2Gi
+    serviceAccount:
+      name: infra-tasks
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/infra-tasks-s3-role-k8s
+  jobs:
+    # use below template for running db-scripts
+    - name: db-scripts-job-template #follow micro-services naming convention
+      template: true #keep this as false for jobs[i] where i>1;
+      tag: db-scripts-5.0-node22 #use db-scripts-2.0-node18 tag for node18
+      env:
+        BRANCH: ""
+        SCRIPT_PATH: ""
+        SCRIPT_TYPE: "migration" #change to dump in case of dump script
+        MODE: "test"
+      inputs:
+        scriptInputs.json: |
+          {
+            "slack_ids": ["@U03N10QKJJJ"]
+          }
+    # use below template for uploading non sensitive envs
+    - name: upload-env-job-template #follow micro-services naming convention
+      template: true #keep this as false for jobs[i] where i>1;
+      tag: upload-env
+      inputs:
+        scriptInputs.json: |
+          {
+            "slack_ids": ["@U03N10QKJJJ"],
+            "buckets": [{ "name": "<bucket-name>","encryption": { "enabled": "true", "key": "AES256" }, "objects":  { "<folder-name>/<Key1>": "<value1>" , "<key2>": "<value2>" }}]
+          }
+    - name: get-staging-env-flow-details
+      template: false #keep this as false for jobs[i] where i>1;
+      tag: db-scripts-4.0-node22 #use db-scripts-2.0-node18 tag for node18
+      jobType: cronJob
+      schedule: "30 3 * * 5"
+      env:
+        AWS_SES_ENDPOINT: "email.ap-south-1.amazonaws.com"
+        BRANCH: "main"
+        SCRIPT_PATH: "dbScripts/dumpScripts/get-staging-env-flow-details.js"
+        SCRIPT_TYPE: "dump" #change to dump in case of dump script
+        MODE: "test"
+        JOB_TYPE: "cronjob"
+      inputs:
+        scriptInputs.json: |-
+          {
+            "slack_ids": ["@U03N10QKJJJ", "@UF6FP6DU5", "@U05QKH4AV6G", "@UA05KV0LT", "@U07EJJE2536", "@U02UYV4GAUR", "@U039CJRHX5E", "@UA05KV0LT", "@U07EJHD9TDJ"]
+          }
+    - name: disable-scheduled-flows-load-exemption
+      template: false
+      tag: db-scripts-4.0-node22
+      jobType: cronJob
+      schedule: "50 10 * * *"
+      env:
+        AWS_SES_ENDPOINT: "email.ap-south-1.amazonaws.com"
+        BRANCH: "main"
+        SCRIPT_PATH: "core/long-term/dumpScripts/disable-scheduled-flows-load-exemption.js"
+        SCRIPT_TYPE: "dump"
+        MODE: "test"
+        JOB_TYPE: "cronjob"
+      inputs:
+        scriptInputs.json: |-
+          {
+          "slack_ids": ["@UCWHPCDB7", "@UP8ACCXPA", "@U03SMALAW"]
+          }
+    - name: update-ep-fdr
+      template: false
+      tag: db-scripts-5.0-node22
+      env:
+        BRANCH: main
+        SCRIPT_PATH: "dbScripts/migrationScripts/updateSandboxFlagForFileDefinitionsAndEdiProfiles.js"
+        SCRIPT_TYPE: migration
+        MODE: persist
+        REPO_NAME: infra-db-scripts
+      inputs:
+        scriptInputs.json: |
+          {
+              "slack_ids": [
+                  "@U065C1KCE07",
+                  "@U04H2ERR0KY"
+              ]
+          }
+    - name: migrate-users-to-ams-qa-prod-rerun
+      template: false
+      tag: db-scripts-4.0-node22
+      env:
+        BRANCH: main
+        SCRIPT_PATH: "dbScripts/migrationScripts/migrate-updateUserMicroServicesConfig.js"
+        SCRIPT_TYPE: migration
+        MODE: persist
+        REPO_NAME: infra-db-scripts
+      inputs:
+        scriptInputs.json: |
+          {
+              "slack_ids": [
+                  "@U02D11XBWRG",
+                  "@U05RADBCYLF"
+              ],
+              "msEnableKey": "enableAMS",
+              "msEnableValue": true
+          }
+    - name: migrate-users-to-audit-service-qa-prod-rerun
+      template: false
+      tag: db-scripts-4.0-node22
+      env:
+        BRANCH: main
+        SCRIPT_PATH: "dbScripts/migrationScripts/migrate-updateUserMicroServicesConfig.js"
+        SCRIPT_TYPE: migration
+        MODE: persist
+        REPO_NAME: infra-db-scripts
+      inputs:
+        scriptInputs.json: |
+          {
+              "slack_ids": [
+                  "@U02D11XBWRG",
+                  "@U05RADBCYLF"
+              ],
+              "msEnableKey": "enableAuditService",
+              "msEnableValue": true
+          }
+    - name: update-gcache-sba-s3-rollout
+      template: false
+      tag: db-scripts-5.0-node22
+      env:
+        BRANCH: main
+        SCRIPT_PATH: "core/long-term/migrationScripts/updateGcache.js"
+        SCRIPT_TYPE: migration
+        MODE: persist
+        REPO_NAME: infra-db-scripts
+      inputs:
+        scriptInputs.json: |
+          {
+              "slack_ids": [],
+              "gcacheKeyValuePairs": [
+                  {
+                      "key": "enableSizeBasedAggregationForAll",
+                      "value": "s3"
+                  }
+              ],
+              "includeLastModified": true
+          }

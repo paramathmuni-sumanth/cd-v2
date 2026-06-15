@@ -1,0 +1,309 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/netsuite-webservices-adaptor
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/core/sa/api-execution
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/testing/sa/loadtesting
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /metrics
+  common:
+    secretRef: newrelic-secrets
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "file-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      startupProbe:
+        enabled: true
+        path: /startupz
+        port: 5000
+        initialDelaySeconds: 0
+        periodSeconds: 2
+        timeoutSeconds: 1
+        failureThreshold: 30
+      livenessProbe:
+        enabled: true
+        failureThreshold: 6
+        initialDelaySeconds: 0
+      readinessProbe:
+        failureThreshold: 3
+        initialDelaySeconds: 0
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2.8
+          memory: 3328Mi
+        requests:
+          cpu: 1
+          memory: 2816Mi
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+        enabled: true
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2026-03-26-08-52
+        celigo.io/scrape: "true"
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/file-adaptor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - file-adaptor.celigo.io
+      - file-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - file-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    newRelic.json: |
+      {
+        "enableNR": true,
+        "distributedNR": true,
+        "transactions": ["all", "custom"],
+        "resources": {
+          "_userId": [],
+          "_importId": [],
+          "_exportId": [],
+          "_connectionId": []
+        }
+      }
+  volumes:
+    - name: file-adaptor-nr-config
+      configMap:
+        name: file-adaptor-config-volume
+  volumeMounts:
+    - mountPath: "/file-adaptor/config/"
+      name: file-adaptor-nr-config
+  deployments:
+    - name: devops-13536
+      deployment:
+        image:
+          tag: startup-probe-fb-0.0.5.433.0
+        resources:
+          limits:
+            cpu: 3
+            memory: 5824Mi
+          requests:
+            cpu: 1.4
+            memory: 5824Mi
+        terminationGracePeriodSeconds: 86400
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 8
+          maxReplicas: 25
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="file-adaptor-devops-13536"})
+                threshold: "100"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              executionContextUserId:
+                regex: '^(66cdf01e2b903592d14af806)$'
+      sidecar:
+        enabled: true
+        inboundConnectionPool:
+          tcp:
+            maxConnections: 125
+    - name: load-testing
+      deployment:
+        image:
+          tag: 2026.3.3-patch-0.0.5.369.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 3
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="file-adaptor-load-testing"})
+                threshold: "50"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(6192a46d75f94b333a5645ae|5001000f95bd157e46d551b4)$'
+      sidecar:
+        enabled: true
+        inboundConnectionPool:
+          tcp:
+            maxConnections: 70
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.5.283.0
+      sidecar:
+        enabled: true
+        inboundConnectionPool:
+          tcp:
+            maxConnections: 650
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 8
+          maxReplicas: 10
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="file-adaptor-app"})
+                threshold: "500"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

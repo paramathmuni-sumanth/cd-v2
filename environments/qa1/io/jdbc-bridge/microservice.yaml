@@ -1,0 +1,130 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/io/sa/rdbms-adaptor
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/jdbc-bridge/readyz"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "jdbc-bridge"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      livenessProbe:
+        enabled: true
+        config:
+          httpGet:
+            path: "/jdbc-bridge/livez"
+      readinessProbe:
+        enabled: true
+        path: "/jdbc-bridge/readyz"
+      containerPort: 8080
+      resources:
+        limits:
+          cpu: 1500m
+          memory: 1000Mi
+        requests:
+          cpu: 300m
+          memory: 700Mi
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- --timeout=10 --tries=60 'http://localhost:8080/jdbc-bridge/openConnections?preStopMode=true'); sleep 1; if [[ "$count" =~ ^[0-9]+$ ]]; then if [ "$count" = "$expected" ]; then for i in $(seq 1 5); do count=$(wget -qO- 'http://localhost:8080/jdbc-bridge/openConnections?terminate=true'); sleep 5; done; fi; else break; fi; done; catalina.sh stop;
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2024-05-09-12-01
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/jdbc-bridge-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - jdbc-bridge.celigo.io
+      - jdbc-bridge.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - jdbc-bridge
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    log4j2.properties: |
+      status = error
+      name = PropertiesConfig
+      customLevels = CUSTOM_DEBUG
+      customLevel.CUSTOM_DEBUG = 450
+      appenders = console
+      appender.console.type = Console
+      appender.console.name = LogToConsole
+      appender.console.layout.type = PatternLayout
+      appender.console.layout.pattern = %d{ISO8601} %-5p (%13F:%L) - %m%n
+      rootLogger.level = info
+      rootLogger.additivity = false
+      rootLogger.appenderRef.console.ref = LogToConsole
+      monitorInterval = 60
+  volumes:
+    - name: log4j2-properties
+      configMap:
+        name: jdbc-bridge-config-volume
+  volumeMounts:
+    - name: log4j2-properties
+      mountPath: /etc/config
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.11.103.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

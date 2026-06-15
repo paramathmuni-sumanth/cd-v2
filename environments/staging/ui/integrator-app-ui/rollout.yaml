@@ -1,0 +1,42 @@
+service: integrator-app-ui
+analysis:
+  source: http
+  url: "https://slack.com/api/conversations.history"
+  method: GET
+  headers:
+    Authorization: "Bearer {{ SLACK_TOKEN }}"
+  params:
+    channel: "C09E67TQ9T5"
+    limit: 200
+    oldest: "{{ (now | floor) - 900 }}"   # fetch only last 15 minutes messages
+  transform: |
+    now as $now |
+    .messages |
+    map(select(.subtype == "bot_message")) |
+    map({
+      ts: (.ts | tonumber),
+      state: (
+        if .attachments and .attachments[0] and .attachments[0].pretext then
+          if .attachments[0].pretext | contains("[Triggered]") then "triggered"
+          elif .attachments[0].pretext | contains("[Resolved]") then "resolved"
+          else "other"
+          end
+        else "other"
+        end
+      )
+    }) |
+    map(select(($now - .ts) <= 900)) |
+    (if length > 0 then
+      sort_by(.ts) |
+      reduce .[] as $m (
+        false;
+        if $m.state == "triggered" then false
+        elif $m.state == "resolved" then true
+        else .
+        end
+      )
+    else
+      true
+    end) |
+    {finalResultHolder: .}
+disabled: true

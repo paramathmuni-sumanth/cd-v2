@@ -1,0 +1,9 @@
+apiVersion: v2
+name: testing
+type: application
+version: 0.1.6
+appVersion: "1.0.0"
+dependencies:
+- name: testing
+  version: 0.1.6
+  repository: https://raw.githubusercontent.com/celigo/helm-charts/gh-pages/

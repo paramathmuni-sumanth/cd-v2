@@ -1,0 +1,105 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/io/sa/flow-management
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: di-aggregation-service
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 400m
+          memory: 350Mi
+        requests:
+          cpu: 120m
+          memory: 250Mi
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; wget -qO- "http://localhost:5000/openConnections?terminate=true"; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- "http://localhost:5000/openConnections"); sleep 5; done; wget -qO- "http://localhost:5000/stopServer"; echo "Done";
+      livenessProbe:
+        config:
+          httpGet:
+            path: /livez
+            port: http
+        enabled: true
+        failureThreshold: 20
+        initialDelaySeconds: 50
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 30
+      podAnnotations:
+        redeployTimestamp: 2026-02-24-11-00
+      readinessProbe:
+        enabled: true
+        failureThreshold: 20
+        initialDelaySeconds: 50
+        path: /readyz
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 30
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::027986264538:role/di-aggregation-service-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - di-aggregation-service.di.svc.cluster.local
+      - di-aggregation-service.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - di-aggregation-service
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.1.71.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

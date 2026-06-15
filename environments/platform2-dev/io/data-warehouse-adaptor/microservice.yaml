@@ -1,0 +1,99 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/io/sa/file-adaptor
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "data-warehouse-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 0
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1100m
+          memory: 1000Mi
+        requests:
+          cpu: 190m
+          memory: 500Mi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2024-05-09-11-00
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::776457608093:role/data-warehouse-adaptor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - data-warehouse-adaptor.celigo.io
+      - data-warehouse-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - data-warehouse-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  PersistentVolumeClaims:
+    - name: data-warehouse-adaptor-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-ws-sc
+  volumes:
+    - name: data-warehouse-adaptor-nfs-storage
+      persistentVolumeClaim:
+        claimName: data-warehouse-adaptor-nfs-pvc
+  volumeMounts:
+    - mountPath: "/data-warehouse-adaptor/bulk_load_files/"
+      name: data-warehouse-adaptor-nfs-storage
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.5.82.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

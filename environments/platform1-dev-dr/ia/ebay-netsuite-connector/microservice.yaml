@@ -1,0 +1,85 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/endpoint-service
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "ebay-netsuite-connector"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 0
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 520m
+          memory: 300Mi
+        requests:
+          cpu: 90m
+          memory: 200Mi
+      terminationGracePeriodSeconds: 3600
+      podAnnotations:
+        redeployTimestamp: 2024-05-09-11-00
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::857438227645:role/ebay-netsuite-connector-s3-role-k8s-platform1-dev-dr
+  virtualService:
+    enabled: true
+    hosts:
+      - ebay-netsuite-connector.ia.celigo.io
+      - ebay-netsuite-connector.ia.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - ebay-netsuite-connector
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.1.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+  env:
+    aws_region: us-west-2
+    ENVIRONMENT_VARIABLES_S3_BUCKET_NAME: celigo-k8s-platform1-dev-dr-env-vars

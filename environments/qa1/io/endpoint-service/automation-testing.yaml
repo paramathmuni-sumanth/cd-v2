@@ -1,0 +1,40 @@
+testing:
+  annotations:
+    sidecar.istio.io/inject: "false"
+# List of job names to create
+# This can be name of the Test Suites to run
+  jobs:
+    - "AFE"
+    - "Proxy"
+    - "MYAPI_MS"
+    - "Oauth2MS"
+    - "Metadata"
+    - "Mapper2.0_Suite1"
+    - "Transformation2.0_suite1"
+    - "ResourceAliases"
+    - "UI2API_MAPPER2.0"
+    - "Mapper_Preview"
+    - "ResponseHeaderToken"
+    - "NetSuite4_EP"
+
+  # Name of the environment variable that will contain the job name
+  # If not provided or empty, no job-specific environment variable will be created
+  var_name: "SUITES"
+  env:
+    SERVICE: "endpoint-service"
+    CUSTOM_URI: "https://api.qa.staging.integrator.io"
+    NODE_ENV: "qa"
+    TAGS: "CDE2E"
+    ENV: "qa"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "celigo-api-automation"
+    pullPolicy: Always
+    TAG: "cdtests"
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+    requests:
+      cpu: 1000m
+      memory: 4Gi

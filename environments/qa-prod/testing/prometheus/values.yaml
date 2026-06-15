@@ -1,0 +1,86 @@
+prometheus:
+  imagePullSecrets: []
+
+  configmapReload:
+    reloadUrl: ""
+    prometheus:
+      enabled: true
+      name: configmap-reload
+      image:
+        repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com/prometheus-config-reloader
+        tag: v0.88.0
+        pullPolicy: IfNotPresent
+      containerPort: 8080
+      containerPortName: metrics
+      resources:
+        requests:
+          memory: 128Mi
+          cpu: 100m
+        limits:
+          memory: 512Mi
+          cpu: 500m
+
+  serverFiles:
+    prometheus.yml:
+      scrape_configs:
+        - job_name: prometheus
+          honor_timestamps: true
+          scrape_interval: 30s
+          scrape_timeout: 10s
+          metrics_path: /metrics
+          scheme: http
+          static_configs:
+            - targets:
+                - localhost:9090
+
+  serviceAccounts:
+    server:
+      create: true
+      name: prometheus-load-testing
+
+  server:
+    name: server
+    configPath: /etc/config/prometheus.yml
+    defaultFlagsOverride: []
+    podAnnotations:
+      sidecar.istio.io/inject: "false"
+    extraFlags:
+      - web.enable-lifecycle
+      - web.enable-remote-write-receiver
+    global:
+      scrape_interval: 30s
+      external_labels:
+        cluster: qa-prod
+        prometheus: testing
+    remoteWrite:
+      - url: http://prometheus-gitops-server-0.prometheus-gitops-server-headless.monitoring.svc.cluster.local:9090/api/v1/write
+      - url: http://prometheus-gitops-server-1.prometheus-gitops-server-headless.monitoring.svc.cluster.local:9090/api/v1/write
+    retention: 5d
+    replicaCount: 2
+    statefulSet:
+      enabled: true
+      podManagementPolicy: OrderedReady
+      pvcDeleteOnStsDelete: true
+      pvcDeleteOnStsScale: false
+    persistentVolume:
+      size: 10Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+    service:
+      enabled: true
+
+  scrapeConfigs: null
+
+  alertmanager:
+    enabled: false
+  prometheus-pushgateway:
+    enabled: false
+  kube-state-metrics:
+    enabled: false
+  prometheus-node-exporter:
+    enabled: false

@@ -1,0 +1,38 @@
+{
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+        "name": "error-notification",
+        "namespace": "argocd",
+        "finalizers": [
+            "resources-finalizer.argocd.argoproj.io"
+        ]
+    },
+    "spec": {
+        "project": "core",
+        "source": {
+            "helm": {
+                "valueFiles": [
+                    "../../core/error-notification/microservice.yaml",
+                    "../../core/error-notification/env.yaml"
+                ]
+            },
+            "path": "charts/microservice",
+            "repoURL": "https://github.com/celigo/cd-prod.git",
+            "targetRevision": "production-eu"
+        },
+        "destination": {
+            "namespace": "core",
+            "server": "https://kubernetes.default.svc"
+        },
+        "syncPolicy": {
+            "automated": {
+                "prune": true,
+                "selfHeal": true
+            },
+            "syncOptions": [
+                "CreateNamespace=true"
+            ]
+        }
+    }
+}

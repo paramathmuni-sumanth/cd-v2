@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "endpoint-service"
+    CUSTOM_URI: "http://endpoint-service.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "endpoint-service"
+    pullPolicy: Always
+    tag: ""

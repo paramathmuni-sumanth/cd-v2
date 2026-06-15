@@ -1,0 +1,46 @@
+service: ftp-bridge-ms-active
+analysis:
+  source: splunk
+  query: >
+    search
+    earliest=-5m 
+    index=apm_traces 
+    k8s.container.name="ftp-bridge-ms-active"
+    deployment.environment=qa1
+    k8s.pod.name=*canary*
+    (logName=onSendResponse  OR logName=ftp_bridge_batchProcessError OR logName=ftp_bridge_fileMoveComplete OR logName=ftp_bridge_fileImportComplete OR logName=ftp_bridge_fileDeleteComplete OR *unhandled* OR *uncaught* ) NOT t=finalize
+    | eval pass=if(match(sc, "^2"), 1, 0),
+           fail=if(match(sc, "^[45]") OR match(_raw, "(?i)unexpected|uncaught|unhandled"), 1, 0),
+           relevantForTotal=if(logName="onSendResponse", 1, 0),
+           passBatch=if(match(_raw, "ftp_bridge_fileMoveComplete|ftp_bridge_fileImportComplete|ftp_bridge_fileDeleteComplete"), 1, 0),
+           failBatch=if(match(_raw, "ftp_bridge_batchProcessError"), 1, 0)
+    | stats sum(pass) as passCount,   
+            sum(fail) as failCount, 
+            sum(relevantForTotal) as totalCount,
+            sum(passBatch) as batchPassCount,
+            sum(failBatch) as batchFailCount
+    | eval errorRate=if(totalCount > 0, failCount / totalCount, 0),
+    totalBatchCount=if(batchPassCount > 0 OR batchFailCount > 0, (batchPassCount + batchFailCount), 0),
+    batchErrorRate=if(totalBatchCount > 0, batchFailCount / totalBatchCount, 0),
+           finalResultHolder=case(
+               batchErrorRate > 0.05 , "false",
+               totalCount == 0 OR errorRate < 0.05, "true",
+               true(), "false"
+           )
+    | appendpipe [| stats count | where count==0 | eval passCount=0, failCount=0, totalCount=0, errorRate=0, finalResultHolder="true" | fields - count]           
+    | fields passCount, failCount, totalCount, errorRate, batchPassCount,batchFailCount, batchErrorRate, finalResultHolder
+  frequency: 5m
+disabled: true
+versions:
+  - version: v2
+    isPromotable: true
+    lastApplied: 2021-09-01 12:00:00
+    stages:
+      - wait: 10m
+        groups: ['FTP Canary User IDs 1']
+      - wait: 10m
+        $push:
+          groups: ['FTP Canary User IDs 2']
+      - wait: 10m
+        $push:
+          groups: ['FTP Canary User IDs 3']

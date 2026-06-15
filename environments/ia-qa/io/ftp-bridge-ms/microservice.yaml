@@ -1,0 +1,152 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/io/sa/endpoint-service
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: ftp-bridge-ms
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 8080
+      resources:
+        limits:
+          cpu: 2824m
+          memory: 2824Mi
+        requests:
+          cpu: 200m
+          memory: 2312Mi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2026-02-24-18-28
+      livenessProbe:
+        enabled: true
+        config:
+          httpGet:
+            path: /ftp-bridge-ms/readyz
+      readinessProbe:
+        enabled: true
+        path: "/ftp-bridge-ms/readyz"
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - 'echo prestop stage ; sleep 1200 ; catalina.sh stop'
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::027986264538:role/ftp-bridge-ms-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - ftp-bridge-ms.io.svc.cluster.local
+      - ftp-bridge-ms.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - ftp-bridge-ms
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    log4j2.properties: |
+      status = error
+      name = PropertiesConfig
+      appenders = console
+      customLevel.ACTIVE_MODE_DEBUG = 425
+      customLevel.CUSTOM_DEBUG = 450
+      customLevel.JSCH_DEBUG = 475
+      loggers = awss3, awstransfer
+      appender.console.type = Console
+      appender.console.name = LogToConsole
+      appender.console.layout.type = PatternLayout
+      appender.console.layout.pattern = %d{ISO8601} %-5p (%13F:%L) - %m%n
+      logger.awss3.name = software.amazon.awssdk.services.s3
+      logger.awss3.level = ${env:DEPLOYMENT_SPECIFIC_S3_LOG_LEVEL:-info}
+      logger.awss3.additivity = false
+      logger.awss3.appenderRef.console.ref = LogToConsole
+      logger.awstransfer.name = software.amazon.awssdk.transfer
+      logger.awstransfer.level = ${env:DEPLOYMENT_SPECIFIC_S3_LOG_LEVEL:-info}
+      logger.awstransfer.additivity = false
+      logger.awstransfer.appenderRef.console.ref = LogToConsole
+      rootLogger.level = ${env:DEPLOYMENT_SPECIFIC_LOG_LEVEL:-info}
+      rootLogger.additivity = false
+      rootLogger.appenderRef.console.ref = LogToConsole
+      monitorInterval = 60
+    newRelic.json: |
+      {
+        "enableNR": true,
+        "transactions": [],
+        "userIds": [],
+        "expOrImpIds": [],
+        "connectionIds": []
+      }
+  volumes:
+    - name: ftp-bridge-ms-config
+      configMap:
+        name: ftp-bridge-ms-config-volume
+  volumeMounts:
+    - name: ftp-bridge-ms-config
+      mountPath: /etc/config
+  deployments:
+    - name: app-canary
+      deployment:
+        image:
+          tag: java-21-fb-0.0.1.132.0
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              x-celigo-version:
+                exact: java21.1.0
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.1.87.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

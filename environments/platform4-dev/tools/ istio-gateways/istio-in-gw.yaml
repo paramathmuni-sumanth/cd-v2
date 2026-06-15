@@ -1,0 +1,35 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: istio-in-gw
+  namespace: istio-gateway
+spec:
+  selector:
+    app: istio-ingress
+  servers:
+  - hosts:
+    - '*.celigo.io'
+    - celigo.io
+    port:
+      name: http
+      number: 80
+      protocol: HTTP
+  # This is for enabling HTTPS connection
+  - hosts:
+    - template.ia.celigo.io
+    port:
+      name: template-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: template-tls-credential
+      mode: MUTUAL
+  # This is for enabling HTTP connection
+  - hosts:
+    - template.ia.celigo.io
+    port:
+      name: template-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true # sends 301 redirect for http requests

@@ -1,0 +1,100 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: streaming-service
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2
+          memory: 5120Mi
+        requests:
+          cpu: 100m
+          memory: 4096Mi
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      podAnnotations:
+        redeployTimestamp: 2025-12-03-15-50
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 2
+        maxReplicas: 1
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::028270547034:role/streaming-service-s3-role-k8s-master-dev
+  virtualService:
+    enabled: true
+    gateways:
+      - istio-gateway/master-dev
+    hosts:
+      - streaming-service.master-dev-core.svc.cluster.local
+      - streaming-service.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - streaming-service
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      env:
+        INTERNAL_USAGE: true
+        INTERNAL_USAGE_USER_IDS: 56cfeeccea99e83b68d67dc2
+      deployment:
+        image:
+          tag: ml-1.0.0.61.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: teststreamingservice
+      env:
+        INTERNAL_USAGE: false
+        INTERNAL_USAGE_USER_IDS: 56cfeeccea99e83b68d67dc2
+      deployment:
+        image:
+          tag: ml-1.0.0.55.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

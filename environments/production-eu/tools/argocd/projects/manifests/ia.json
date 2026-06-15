@@ -1,0 +1,29 @@
+{
+    "project": {
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "AppProject",
+        "metadata": {
+            "name": "ia",
+            "namespace": "argocd"
+        },
+        "spec": {
+            "description": "ia",
+            "sourceRepos": [
+                "https://github.com/celigo/cd-prod.git",
+                "https://raw.githubusercontent.com/celigo/helm-charts/gh-pages/"
+            ],
+            "destinations": [
+                {
+                    "namespace": "ia",
+                    "server": "https://kubernetes.default.svc"
+                }
+            ],
+            "clusterResourceWhitelist": [
+                {
+                    "group": "*",
+                    "kind": "*"
+                }
+            ]
+        }
+    }
+}

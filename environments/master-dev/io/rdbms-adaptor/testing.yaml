@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "rdbms-adaptor"
+    CUSTOM_URI: "http://rdbms-adaptor.master-dev-io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "rdbms-adaptor"
+    pullPolicy: Always
+    tag: ""

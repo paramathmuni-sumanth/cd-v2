@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openconnections-script-execution-job
+spec:
+  schedule: "*/5 * * * *"
+  jobTemplate:
+    spec:
+      completions: 1
+      template:
+        spec:
+          serviceAccountName: openconnections-serviceaccount
+          containers:
+          - name: amazonlinux
+            image: public.ecr.aws/c4g3p9t9/amazonlinux:14.18.1-8.6.0
+            command: ["/bin/bash"]
+            args: 
+            - -c
+            - |
+              curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+              chmod +x kubectl
+              mv kubectl /usr/local/bin/
+              cd /root
+              ls -l
+              ./script.sh
+            volumeMounts:
+            - name: script-volume
+              mountPath: /root/script.sh
+              subPath: script.sh
+              readOnly: false
+          restartPolicy: Never
+          volumes:
+          - name: script-volume
+            configMap:
+              name: openconnections-configmap
+              defaultMode: 0777

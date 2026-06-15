@@ -1,0 +1,109 @@
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: io
+  name: env-io-dev-access
+rules:
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+
+---
+
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: ia
+  name: env-ia-dev-access
+rules:
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+
+---
+
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: core
+  name: env-core-dev-access
+rules:
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+
+---
+
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: ui
+  name: env-ui-dev-access
+rules:
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+
+---
+
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: env-io-dev-access-role-binding
+  namespace: io
+subjects:
+- kind: Group
+  name: k8s_dev-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: env-io-dev-access
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: env-ia-dev-access-role-binding
+  namespace: ia
+subjects:
+- kind: Group
+  name: k8s_dev-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: env-ia-dev-access
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: env-core-dev-access-role-binding
+  namespace: core
+subjects:
+- kind: Group
+  name: k8s_dev-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: env-core-dev-access
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: env-ui-dev-access-role-binding
+  namespace: ui
+subjects:
+- kind: Group
+  name: k8s_dev-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: env-ui-dev-access
+  apiGroup: rbac.authorization.k8s.io

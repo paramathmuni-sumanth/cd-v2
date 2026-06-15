@@ -1,0 +1,217 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/ftp-bridge-ms/readyz"
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /ftp-bridge-ms/metrics
+  common:
+    secretRef: newrelic-secrets
+    image:
+      repository: 860378520032.dkr.ecr.us-east-1.amazonaws.com
+      name: ftp-bridge-ms
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 8080
+      podAnnotations:
+        redeployTimestamp: "2025-11-20-15-30"
+        celigo.io/scrape: 'fast'
+        celigo.io/path: "/ftp-bridge-ms/metrics"
+      resources:
+        limits:
+          cpu: 2824m
+          memory: 4800Mi
+        requests:
+          cpu: 1000m
+          memory: 4200Mi
+      livenessProbe:
+        enabled: true
+        config:
+          httpGet:
+            path: /ftp-bridge-ms/livez
+      readinessProbe:
+        enabled: true
+        path: "/ftp-bridge-ms/readyz"
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" == "$expected" ]; do count=$(wget -qO- 'http://localhost:8080/ftp-bridge-ms/openConnections?preStopMode=true'); sleep 1; if [ "$count" == "$expected" ]; then for i in seq 1 5; do count=$(wget -qO- 'http://localhost:8080/ftp-bridge-ms/openConnections?terminate=true'); sleep 5; done; fi; done; catalina.sh stop
+      terminationGracePeriodSeconds: 86400
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::609704034070:role/ftp-bridge-ms-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - ftp-bridge-ms.io.svc.cluster.local
+      - ftp-bridge-ms.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - ftp-bridge-ms
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    log4j2.properties: |
+      status = error
+      name = PropertiesConfig
+      appenders = console
+      customLevel.ACTIVE_MODE_DEBUG = 425
+      customLevel.CUSTOM_DEBUG = 450
+      customLevel.JSCH_DEBUG = 475
+      loggers = awss3, awstransfer
+      appender.console.type = Console
+      appender.console.name = LogToConsole
+      appender.console.layout.type = PatternLayout
+      appender.console.layout.pattern = %d{ISO8601} %-5p (%13F:%L) - %m%n
+      logger.awss3.name = software.amazon.awssdk.services.s3
+      logger.awss3.level = ${env:DEPLOYMENT_SPECIFIC_S3_LOG_LEVEL:-info}
+      logger.awss3.additivity = false
+      logger.awss3.appenderRef.console.ref = LogToConsole
+      logger.awstransfer.name = software.amazon.awssdk.transfer
+      logger.awstransfer.level = ${env:DEPLOYMENT_SPECIFIC_S3_LOG_LEVEL:-info}
+      logger.awstransfer.additivity = false
+      logger.awstransfer.appenderRef.console.ref = LogToConsole
+      rootLogger.level = ${env:DEPLOYMENT_SPECIFIC_LOG_LEVEL:-info}
+      rootLogger.additivity = false
+      rootLogger.appenderRef.console.ref = LogToConsole
+      monitorInterval = 60
+    newRelic.json: |
+      {
+        "enableNR": true,
+        "transactions": [],
+        "userIds": [],
+        "expOrImpIds": [],
+        "connectionIds": []
+      }
+  volumes:
+    - name: ftp-bridge-ms-config
+      configMap:
+        name: ftp-bridge-ms-config-volume
+  volumeMounts:
+    - name: ftp-bridge-ms-config
+      mountPath: /etc/config
+  deployments:
+    - name: java-21-temp-app
+      deployment:
+        image:
+          tag: java-21-fb-0.0.1.132.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 3
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(6509ab64bfa69be02d647680|690b58420bc4dfd29ddc4576|690b584a49aaec66f11eb8a8)$'
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.1.87.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 10
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.90, celigo_metrics_open_connections{deploymentName="ftp-bridge-ms-app"})
+                threshold: "60"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

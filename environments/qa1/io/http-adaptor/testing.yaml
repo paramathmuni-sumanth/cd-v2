@@ -1,0 +1,18 @@
+testing:
+  env:
+    SERVICE: "http-adaptor"
+    CUSTOM_URI: "http://http-adaptor.io.svc.cluster.local"
+    TAG: "CD_TEST"
+    NODE_OPTIONS: "--max-old-space-size=512"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "http-adaptor"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 2Gi
+    requests:
+      cpu: 100m
+      memory: 1Gi

@@ -1,0 +1,89 @@
+keda:  
+  global:
+    image:
+      registry: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+
+  image:
+    keda:
+      repository: keda
+    metricsApiServer:
+      repository: keda-metrics-apiserver
+    webhooks:
+      repository: keda-admission-webhooks
+    pullPolicy: Always
+
+  clusterName: qa-prod-aws-eks-ap-south-1
+  clusterDomain: cluster.local
+
+  imagePullSecrets: []
+
+  operator:
+    revisionHistoryLimit: 2
+    replicaCount: 2
+
+  metricsServer:
+    revisionHistoryLimit: 2
+    replicaCount: 2
+
+  webhooks:
+    enabled: true
+
+  podDisruptionBudget:
+    operator:
+      minAvailable: 1
+
+    metricServer:
+      minAvailable: 1
+
+    webhooks:
+      minAvailable: 1
+
+  logging:
+    operator:
+      level: info
+      format: console
+    metricServer:
+      zapEncoder: console
+      zapLevel: info
+      zapTimeEncoding: rfc3339
+    webhooks:
+      level: info
+      format: console
+      timeEncoding: rfc3339
+
+  resources:
+    operator:
+      limits:
+        cpu: 1
+        memory: 1000Mi
+      requests:
+        cpu: 100m
+        memory: 100Mi
+    metricServer:
+      limits:
+        cpu: 1
+        memory: 1000Mi
+      requests:
+        cpu: 100m
+        memory: 100Mi
+    webhooks:
+      limits:
+        cpu: 1
+        memory: 1000Mi
+      requests:
+        cpu: 100m
+        memory: 100Mi
+
+  serviceAccount:
+    operator:
+      create: true
+      name: keda-operator
+      automountServiceAccountToken: true
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/keda-operator-qa-prod
+    metricServer:
+      create: true
+      name: keda-metrics-server
+      automountServiceAccountToken: true
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/keda-operator-qa-prod

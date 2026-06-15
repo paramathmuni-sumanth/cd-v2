@@ -1,0 +1,35 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: power-of-n-choices-http-adaptor
+  namespace: io
+spec:
+  workloadSelector:
+    labels:
+      app: http-adaptor
+  configPatches:
+  - applyTo: HTTP_ROUTE
+    match:
+      context: SIDECAR_OUTBOUND
+      routeConfiguration:
+        vhost:
+          name: "http-adaptor.io.svc.cluster.local:80"
+    patch:
+      operation: MERGE
+      value:
+        route:
+          cluster: "outbound|80||http-adaptor.io.svc.cluster.local"
+  - applyTo: CLUSTER
+    match:
+      context: SIDECAR_OUTBOUND
+      cluster:
+        name: "outbound|80||http-adaptor.io.svc.cluster.local"
+    patch:
+      operation: MERGE
+      value:
+        lb_policy: LEAST_REQUEST
+        least_request_lb_config:
+          choice_count: 15  # Power of 3 choices (can be 2, 3, 4, etc.)
+          active_request_bias:
+            default_value: 1.0
+            runtime_key: "upstream.healthy_panic_threshold"

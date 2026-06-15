@@ -1,0 +1,14 @@
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: salesforce-adaptor-access-logs
+  namespace: io
+spec:
+  selector:
+    matchLabels:
+      app: salesforce-adaptor
+  accessLogging:
+    - providers:
+      - name: access-log-provider
+      filter:
+        expression: response.code >= 300

@@ -1,0 +1,149 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "integrator-app-ui"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 0
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 500m
+          memory: 250Mi
+        requests:
+          cpu: 100m
+          memory: 150Mi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2024-05-09-11-00
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::857438227645:role/integrator-app-ui-s3-role-k8s-platform1-dev-dr
+  virtualService:
+    enabled: true
+    hosts:
+      - '*'
+    gateways:
+      - istio-gateway/istio-in-gw-integ
+    http:
+      - match:
+          - uri:
+              exact: /classifications/errors
+        route:
+          - destination:
+              host: error-classifier-v2.io.svc.cluster.local
+      - match:
+          - method:
+              exact: POST
+            uri:
+              prefix: /signin
+          - method:
+              exact: GET
+            uri:
+              prefix: /csrf
+          - method:
+              exact: POST
+            uri:
+              prefix: /mfa/verify
+          - method:
+              exact: POST
+            uri:
+              prefix: /signout
+          - method:
+              exact: GET
+            uri:
+              prefix: /auth/google/oauth2callback
+          - method:
+              exact: POST
+            uri:
+              prefix: /auth/google
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /v1
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /api
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /system/v1
+          - method:
+              regex: "^(GET|POST|PUT|PATCH|DELETE)$"
+            uri:
+              prefix: /netsuite/v1
+          - method:
+              regex: "^(GET|POST)$"
+            uri:
+              prefix: /sso
+          - method:
+              regex: "^(GET|POST|DELETE|PUT)$"
+            uri:
+              regex: "^/lookupcaches/.*"
+          - method:
+              exact: POST
+            uri:
+              regex: "^/i.{9}$"
+          - method:
+              exact: POST
+            uri:
+              regex: "^/e.{9}$"
+        route:
+          - destination:
+              host: api-gateway.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-app-ui
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.89.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+  env:
+    aws_region: us-west-2
+    ENVIRONMENT_VARIABLES_S3_BUCKET_NAME: celigo-k8s-platform1-dev-dr-env-vars

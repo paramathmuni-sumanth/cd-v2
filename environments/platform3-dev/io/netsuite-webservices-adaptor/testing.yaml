@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "netsuite-webservices-adaptor"
+    CUSTOM_URI: "http://netsuite-webservices-adaptor.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "netsuite-webservices-adaptor"
+    pullPolicy: Always
+    tag: ""

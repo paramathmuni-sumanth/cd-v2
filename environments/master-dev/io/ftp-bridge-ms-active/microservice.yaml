@@ -1,0 +1,162 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: false
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: ftp-bridge-ms
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 8080
+      resources:
+        limits:
+          cpu: 2824m
+          memory: 4800Mi
+        requests:
+          cpu: 2081m
+          memory: 4200Mi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2025-12-05-10-35
+        sidecar.istio.io/inject: 'false'
+      rangeOfContainerPorts:
+        - name: active
+          start: 15000
+          end: 15030
+          hostPortEnabled: true
+      livenessProbe:
+        enabled: true
+        config:
+          httpGet:
+            path: /ftp-bridge-ms/livez
+      readinessProbe:
+        enabled: true
+        path: "/ftp-bridge-ms/readyz"
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" == "$expected" ]; do count=$(wget -qO- 'http://localhost:8080/ftp-bridge-ms/openConnections?preStopMode=true'); sleep 1; if [ "$count" == "$expected" ]; then for i in seq 1 5; do count=$(wget -qO- 'http://localhost:8080/ftp-bridge-ms/openConnections?terminate=true'); sleep 5; done; fi; done; catalina.sh stop;
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 1
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: false
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::028270547034:role/ftp-bridge-ms-active-s3-role-k8s-master-dev
+  virtualService:
+    enabled: false
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - ftp-bridge-ms-active
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: application-type
+                operator: In
+                values:
+                  - ftp_active
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    log4j2.properties: |
+      status = error
+      name = PropertiesConfig
+      appenders = console
+      customLevel.ACTIVE_MODE_DEBUG = 425
+      customLevel.CUSTOM_DEBUG = 450
+      customLevel.JSCH_DEBUG = 475
+      loggers = awss3, awstransfer
+      appender.console.type = Console
+      appender.console.name = LogToConsole
+      appender.console.layout.type = PatternLayout
+      appender.console.layout.pattern = %d{ISO8601} %-5p (%13F:%L) - %m%n
+      logger.awss3.name = software.amazon.awssdk.services.s3
+      logger.awss3.level = ${env:DEPLOYMENT_SPECIFIC_S3_LOG_LEVEL:-info}
+      logger.awss3.additivity = false
+      logger.awss3.appenderRef.console.ref = LogToConsole
+      logger.awstransfer.name = software.amazon.awssdk.transfer
+      logger.awstransfer.level = ${env:DEPLOYMENT_SPECIFIC_S3_LOG_LEVEL:-info}
+      logger.awstransfer.additivity = false
+      logger.awstransfer.appenderRef.console.ref = LogToConsole
+      rootLogger.level = ${env:DEPLOYMENT_SPECIFIC_LOG_LEVEL:-ACTIVE_MODE_DEBUG}
+      rootLogger.additivity = false
+      rootLogger.appenderRef.console.ref = LogToConsole
+      monitorInterval = 60
+    newRelic.json: |
+      {
+        "enableNR": true,
+        "transactions": [],
+        "userIds": [],
+        "expOrImpIds": ["6870ddddeb81c4929f1139e3","686ad6a219762033c1c9bbaf","6883be95dce707e38d9d8955","6883bdf0e8b5737e468e4d72","68837f4066f31cbce920a1a9"],
+        "connectionIds": []
+      }
+  volumes:
+    - name: ftp-bridge-ms-active-config
+      configMap:
+        name: ftp-bridge-ms-active-config-volume
+  volumeMounts:
+    - name: ftp-bridge-ms-active-config
+      mountPath: /etc/config
+  tolerations:
+    - key: "application-type"
+      operator: "Equal"
+      value: "ftp_active"
+      effect: "NoSchedule"
+  networkPolicy:
+    enabled: true
+    ingress:
+      - from:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: master-dev-io
+            podSelector:
+              matchLabels:
+                app: file-adaptor
+      - from:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+        ports:
+          - protocol: TCP
+            port: 15000
+            endPort: 15030
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.1.87.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

@@ -1,0 +1,10 @@
+testing:
+  env:
+    SERVICE: "http-adaptor"
+    CUSTOM_URI: "http://http-adaptor.io.svc.cluster.local"
+    DEPLOYMENT_ENVIRONMENT: "platform1-dev"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "http-adaptor"
+    pullPolicy: Always
+    tag: ""

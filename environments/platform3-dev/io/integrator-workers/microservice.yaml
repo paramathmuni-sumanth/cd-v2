@@ -1,0 +1,194 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/testing/sa/default
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    secretRef: newrelic-no-secrets
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: integrator-workers
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 2
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2000m
+          memory: 14Gi
+        requests:
+          cpu: 2000m
+          memory: 10Gi
+      startupProbe:
+        enabled: true
+        path: "/"
+        port: "9999"
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        timeoutSeconds: 10
+        successThreshold: 1
+        failureThreshold: 5
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; wget -qO- "http://localhost:5000/openConnections?terminate=true"; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- "http://localhost:5000/openConnections"); sleep 5; done; wget -qO- "http://localhost:5000/stopServer"; echo "Done";
+      podAnnotations:
+        redeployTimestamp: 2025-11-28-16-50
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 3
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+    customToken:
+      enabled: true
+      image:
+        name: "token-refresher"
+        tag: "generic-v31"
+      refreshInterval: "43200"
+      expiryTime: "86700"
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::620736318138:role/integrator-workers-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - integrator-workers.io.svc.cluster.local
+      - integrator-workers.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-workers
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: diworker-do-not-remove
+      env:
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+        WORKER_TYPE: "DIWorker"
+        CIRCUIT_BREAKER_ENABLED: true
+        DATABASE_POOL_SIZE: 10
+        VISIBILITY_TIMEOUT_GUARD_ENABLED: true
+        VISIBILITY_TIMEOUT_GUARD_THRESHOLD_MS: 45000
+      deployment:
+        replicaCount: 1
+        image:
+          tag: ml-1.0.0.714.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: diprimeworker-do-not-remove
+      env:
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 1
+        WORKER_TYPE: "DIPrimeWorker"
+        DATABASE_POOL_SIZE: 10
+        NEW_RELIC_NATIVE_METRICS_ENABLED: "true"
+        GC_MONITORING_ENABLED: true
+        MAX_SEMI_SPACE_SIZE: 32
+        AGGREGATION_MULTIPART_PART_SIZE_MB: 20
+        VISIBILITY_TIMEOUT_GUARD_ENABLED: true
+        VISIBILITY_TIMEOUT_GUARD_THRESHOLD_MS: 45000
+      deployment:
+        replicaCount: 1
+        resources:
+          requests:
+            cpu: 2500m
+            memory: 5Gi
+          limits:
+            cpu: 3500m
+            memory: 8Gi
+        image:
+          tag: ml-1.0.0.714.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: chuncking-queue-worker-do-not-remove
+      env:
+        MAX_CONSUMER_LOAD: 35
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+        WORKER_TYPE: "ChunckingQueueWorker"
+        DATABASE_POOL_SIZE: 10
+        VISIBILITY_TIMEOUT_GUARD_ENABLED: true
+        VISIBILITY_TIMEOUT_GUARD_THRESHOLD_MS: 45000
+        MAX_INFLIGHT_RETRY_PUTS: 100
+        CIRCUIT_BREAKER_ENABLED: true
+        CIRCUIT_BREAKER_PHASE1_DELAYS: '[2000,5000,10000,20000,40000]'
+        CIRCUIT_BREAKER_OPEN_DURATION: 100000
+        CIRCUIT_BREAKER_FINAL_ATTEMPT: true
+        MICROSERVICE_WS_CONNECTION_TIMEOUT: 30000
+      deployment:
+        replicaCount: 10
+        image:
+          tag: ml-1.0.0.714.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 20
+          pollingInterval: 30
+          cooldownPeriod: 600
+          triggerAuthentication:
+            podIdentity:
+              provider: aws
+              identityOwner: keda
+          triggers:
+            - type: aws-sqs-queue
+              authenticationRef:
+                name: integrator-workers-chuncking-queue-worker-do-not-remove-trigger-auth
+              metadata:
+                queueURL: "https://sqs.ap-south-1.amazonaws.com/620736318138/chunk_generation_queue.fifo"
+                queueLength: "20"
+                activationQueueLength: "10"
+                awsRegion: "ap-south-1"
+          behavior:
+            scaleUp:
+              stabilizationWindowSeconds: 60
+            scaleDown:
+              stabilizationWindowSeconds: 600
+              policies:
+                - type: Pods
+                  value: 1
+                  periodSeconds: 60
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.696.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

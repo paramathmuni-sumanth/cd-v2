@@ -1,0 +1,173 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/io/sa/integrator-workers-ping
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/core/sa/api-execution
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "netsuite-distributed-adaptor"
+    subscriptionType:
+      enabled: true
+    deployment:
+      livenessProbe:
+        config:
+          exec:
+            command:
+              - /bin/bash
+              - /opt/docker/probe-scripts/probe.sh
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 10
+        failureThreshold: 10
+      readinessProbe:
+        enabled: true
+        failureThreshold: 3
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1500m
+          memory: 3.5Gi
+        requests:
+          cpu: 500m
+          memory: 3Gi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 43200
+      podAnnotations:
+        redeployTimestamp: "2026-04-24-11-00"
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+      outlierDetection:
+        maxEjectionPercent: 0
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::609704034070:role/netsuite-distributed-adaptor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - netsuite-distributed-adaptor.celigo.io
+      - netsuite-distributed-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - netsuite-distributed-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  PersistentVolumeClaims:
+    - name: netsuite-distributed-adaptor-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-ws-sc
+    - name: netsuite-distributed-adaptor-enterprise-logs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-enterprise-logs
+  configVolume:
+    logLevel.json: |
+      {
+        "default": "info",
+        "configPerPod": false
+      }
+    probe-config.json: |
+      {
+        "DUMP_ENABLED": true,
+        "HEAP_DUMP_THRESHOLD": 3,
+        "HEAPDUMP_ENABLED": false,
+        "MAX_PERF_DUMP_PER_HOUR": 1
+      }
+  volumes:
+    - name: probe-config-volume
+      configMap:
+        name: netsuite-distributed-adaptor-config-volume
+    - name: loglevel-config-volume
+      configMap:
+        name: netsuite-distributed-adaptor-config-volume
+    - name: netsuite-distributed-adaptor-nfs-storage
+      persistentVolumeClaim:
+        claimName: netsuite-distributed-adaptor-nfs-pvc
+    - name: netsuite-distributed-adaptor-enterprise-logs-storage
+      persistentVolumeClaim:
+        claimName: netsuite-distributed-adaptor-enterprise-logs-pvc
+  volumeMounts:
+    - mountPath: "/opt/probe-config"
+      name: probe-config-volume
+    - mountPath: "/etc/config/"
+      name: loglevel-config-volume
+    - mountPath: /service-core-dumps
+      name: netsuite-distributed-adaptor-nfs-storage
+    - mountPath: /mnt/efs
+      name: netsuite-distributed-adaptor-enterprise-logs-storage
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: 2026.5.4-patch-0.0.1.104.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

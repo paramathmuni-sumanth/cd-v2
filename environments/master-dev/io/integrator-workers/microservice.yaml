@@ -1,0 +1,125 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "integrator-workers"
+    subscriptionType:
+      enabled: false
+    deployment:
+      livenessProbe:
+        failureThreshold: 6
+      readinessProbe:
+        failureThreshold: 3
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        requests:
+          cpu: 2500m
+          memory: 8Gi
+        limits:
+          cpu: 3000m
+          memory: 12Gi
+      startupProbe:
+        enabled: true
+        path: "/"
+        port: "9999"
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        timeoutSeconds: 10
+        successThreshold: 1
+        failureThreshold: 5
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; wget -qO- "http://localhost:5000/openConnections?terminate=true"; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- "http://localhost:5000/openConnections"); sleep 5; done; wget -qO- "http://localhost:5000/stopServer"; echo "Done";
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2026-05-20-18-00
+        celigo.io/scrape: 'fast'
+    hpa:
+      autoscaling:
+        enabled: false
+    customToken:
+      enabled: true
+      image:
+        name: "token-refresher"
+        tag: "generic-v31"
+      refreshInterval: "43200"
+      expiryTime: "86700"
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::028270547034:role/integrator-workers-s3-role-k8s-master-dev
+  virtualService:
+    enabled: true
+    gateways:
+      - istio-gateway/master-dev
+    hosts:
+      - integrator-workers.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-workers
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  PersistentVolumeClaims:
+    - name: integrator-workers-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-enterprise-logs-master-dev
+  volumes:
+    - name: integrator-workers-nfs-storage
+      persistentVolumeClaim:
+        claimName: integrator-workers-nfs-pvc
+  volumeMounts:
+    - mountPath: "/mnt/efs"
+      name: integrator-workers-nfs-storage
+  deployments:
+    - name: app
+      env:
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+      deployment:
+        image:
+          tag: 2026.5.1.1-hotfix-fb-1.0.0.686.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

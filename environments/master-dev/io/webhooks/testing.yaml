@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "webhooks"
+    CUSTOM_URI: "http://webhooks.master-dev-io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "webhooks"
+    pullPolicy: Always
+    tag: ""

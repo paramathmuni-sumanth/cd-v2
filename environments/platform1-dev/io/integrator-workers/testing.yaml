@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "integrator-workers"
+    CUSTOM_URI: "http://integrator-workers.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "integrator-workers"
+    pullPolicy: Always
+    tag: ""

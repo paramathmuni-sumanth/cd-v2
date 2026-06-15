@@ -1,0 +1,108 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    image:
+      repository: 860378520032.dkr.ecr.us-east-1.amazonaws.com
+      name: integrator-workers
+    subscriptionType:
+      enabled: false
+    deployment:
+      readinessProbe:
+        enabled: false
+      livenessProbe:
+        enabled: false
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 500m
+          memory: 2Gi
+        requests:
+          cpu: 500m
+          memory: 1Gi
+      terminationGracePeriodSeconds: 86400
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - -c
+              - expected="0"; count=""; wget -qO- "http://localhost:5000/openConnections?terminate=true"; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- "http://localhost:5000/openConnections"); sleep 5; done; wget -qO- "http://localhost:5000/stopServer"; echo "Done";
+    hpa:
+      autoscaling:
+        enabled: false
+  env:
+    NODE_ENV: staging
+    aws_region: us-east-1
+    ENVIRONMENT_VARIABLES_S3_BUCKET_NAME: celigo-k8s-staging-env-vars
+    NEW_RELIC_APP_NAME: staging-integrator-workers-ping
+    NODE_OPTIONS: --max-old-space-size=512
+    MODE: P
+    MAX_LOAD: 1000
+    IGNORE_WHITELISTED_CONNECTIONS: true
+    IP_WHITELISTING_CONNECTION_IDS: "66bb0f5e806828675fb7c9dd,66bb0f6e0a71d540234dc458,66bb0f7533fb8ca59645a9fd,66bb0fa0468fdfff367ee660,66bb0f84806828675fb7cab0"
+    IP_MODE: v1
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::609704034070:role/integrator-workers-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - integrator-workers-ping.io.svc.cluster.local
+      - integrator-workers-ping.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-workers-ping
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.235.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

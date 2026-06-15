@@ -1,0 +1,11 @@
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: load-testing-access-logs
+  namespace: testing
+spec:
+  accessLogging:
+    - providers:
+      - name: access-log-provider
+      filter:
+        expression: response.code >= 300

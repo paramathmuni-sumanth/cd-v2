@@ -1,0 +1,9 @@
+apiVersion: v2
+name: cp-ksql-server
+type: application
+version: 0.1.0-3
+appVersion: "1.0"
+dependencies:
+- name: cp-ksql-server
+  version: 0.1.0-3
+  repository: https://raw.githubusercontent.com/celigo/helm-charts/gh-pages/

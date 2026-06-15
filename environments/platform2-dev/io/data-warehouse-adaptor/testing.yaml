@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "data-warehouse-adaptor"
+    CUSTOM_URI: "http://data-warehouse-adaptor.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "data-warehouse-adaptor"
+    pullPolicy: Always
+    tag: ""

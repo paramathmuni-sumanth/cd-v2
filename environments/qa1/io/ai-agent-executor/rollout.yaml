@@ -1,0 +1,85 @@
+service: ai-agent-executor
+analysis:
+  source: splunk
+  query: >
+    search earliest=-5m index=qa
+    "k8s.namespace.name"=io
+    "k8s.container.name"="ai-agent-executor"
+    k8s.pod.name=*canary*
+    (
+      (logName=httpRequestComplete statusCode IN (2*, 5*))
+      OR logName IN (
+        unhandledException, httpRequestError,
+        responseValidationError, errorFormattingErrors,
+        chatStreamUnexpectedError, aiAccessCheckError,
+        orchestratorCreateAgentFailed,
+        rmsToolListNotConfigured, rmsToolListFailed,
+        toolInvokeNetworkError, toolInvokeStreamNetworkError,
+        aiagentTokenGenerationFailed
+      )
+      OR (logName=mongoConfig _raw="* - ERROR:*")
+      OR (
+        logName=appErrorHandled statusCode>=500
+        NOT code IN (
+          "mcp_http_error", "mcp_invalid_params", "mcp_internal_error",
+          "mcp_connection_error", "mcp_timeout_error", "moderation_api_error"
+        )
+      )
+    )
+    NOT (logName=unhandledException error="No response returned.")
+    NOT (logName=httpRequestError error="No response returned.")
+    | rex field=_raw " - (?<level>ERROR|WARN|INFO):"
+    | eval sc=coalesce(statusCode, status_code, sc)
+    | eval pass=if(logName="httpRequestComplete" AND match(sc, "^2"), 1, 0)
+    | eval fail=case(
+        logName IN (
+          "unhandledException", "httpRequestError",
+          "responseValidationError", "errorFormattingErrors",
+          "chatStreamUnexpectedError", "aiAccessCheckError",
+          "orchestratorCreateAgentFailed",
+          "rmsToolListNotConfigured", "rmsToolListFailed",
+          "toolInvokeNetworkError", "toolInvokeStreamNetworkError",
+          "aiagentTokenGenerationFailed"
+        ), 1,
+        logName="mongoConfig" AND level="ERROR", 1,
+        logName="httpRequestComplete" AND sc>=500 AND NOT sc IN (502, 503, 504), 1,
+        logName="appErrorHandled" AND sc>=500, 1,
+        true(), 0
+      )
+    | eval configFail=if(logName IN (
+        "rmsToolListNotConfigured", "rmsToolListFailed",
+        "aiagentTokenGenerationFailed", "aiAccessCheckError"
+      ) OR (logName="mongoConfig" AND level="ERROR"), 1, 0)
+    | eval crashFail=if(logName IN (
+        "responseValidationError", "errorFormattingErrors",
+        "chatStreamUnexpectedError", "unhandledException", "httpRequestError"
+      ), 1, 0)
+    | eval softFail=if(fail=1 AND configFail=0 AND crashFail=0, 1, 0)
+    | eval relevant=if(logName="httpRequestComplete" OR fail=1, 1, 0)
+    | stats
+        sum(pass) as passCount,
+        sum(fail) as failCount,
+        sum(configFail) as configFailCount,
+        sum(crashFail) as crashFailCount,
+        sum(softFail) as softFailCount,
+        sum(relevant) as totalCount
+    | eval errorRate=if(totalCount>0, failCount/totalCount, 0)
+    | eval finalResultHolder=case(
+        configFailCount >= 3, "false",
+        crashFailCount >= 2, "false",
+        failCount = 0, "true",
+        passCount < 50, "true",
+        softFailCount >= 5, "false",
+        errorRate > 0.005, "false",
+        true(), "true"
+      )
+    | appendpipe [| stats count | where count==0 | eval passCount=0, failCount=0, configFailCount=0, crashFailCount=0, softFailCount=0, totalCount=0, errorRate=0, finalResultHolder="true" | fields - count]
+    | fields passCount, failCount, configFailCount, crashFailCount, softFailCount, totalCount, errorRate, finalResultHolder
+  frequency: 7m
+disabled: true
+versions:
+  - version: v2
+    isPromotable: true
+    stages:
+      - wait: 10m
+        groups: ["Automation User QA"]

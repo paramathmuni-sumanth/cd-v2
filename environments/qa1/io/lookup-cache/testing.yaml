@@ -1,0 +1,17 @@
+testing:
+  env:
+    SERVICE: "lookup-cache"
+    CUSTOM_URI: "http://lookup-cache.io.svc.cluster.local"
+    TAG: "CD_TESTS"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "lookup-cache"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

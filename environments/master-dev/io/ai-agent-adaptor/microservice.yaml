@@ -1,0 +1,124 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/master-dev-io/sa/endpoint-service
+                  - cluster.local/ns/master-dev-io/sa/http-adaptor
+                  - cluster.local/ns/master-dev-io/sa/executor-service
+                  - cluster.local/ns/master-dev-io/sa/integrator-workers
+                  - cluster.local/ns/master-dev-core/sa/api-execution
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /metrics
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: ai-agent-adaptor
+    subscriptionType:
+      enabled: false
+    deployment:
+      livenessProbe:
+        failureThreshold: 3
+      readinessProbe:
+        failureThreshold: 3
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1200m
+          memory: 1024Mi
+        requests:
+          cpu: 600m
+          memory: 512Mi
+      terminationGracePeriodSeconds: 300
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      podAnnotations:
+        redeployTimestamp: 2026-04-14-00-00
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::028270547034:role/ai-agent-adaptor-s3-role-k8s-master-dev
+  virtualService:
+    enabled: true
+    gateways:
+      - istio-gateway/master-dev
+    hosts:
+      - ai-agent-adaptor.celigo.io
+      - ai-agent-adaptor.master-dev-io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - ai-agent-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  PersistentVolumeClaims:
+    - name: ai-agent-adaptor-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-enterprise-logs-master-dev
+  volumes:
+    - name: ai-agent-adaptor-nfs-storage
+      persistentVolumeClaim:
+        claimName: ai-agent-adaptor-nfs-pvc
+  volumeMounts:
+    - mountPath: "/mnt/efs"
+      name: ai-agent-adaptor-nfs-storage
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: 2026.4.1.1-hotfix-fb-0.0.1.16.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

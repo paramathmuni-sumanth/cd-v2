@@ -1,0 +1,157 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: false
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: ftps-server-enforce-tls-resumption
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 21
+      rangeOfContainerPorts:
+        - start: 10090
+          end: 10100
+          name: pasv
+          hostPortEnabled: false
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+        requests:
+          cpu: "250m"
+          memory: "256Mi"
+      terminationGracePeriodSeconds: 60
+      podAnnotations:
+        redeployTimestamp: 2026-03-30-16-41
+        sidecar.istio.io/inject: 'false'
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 3
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: false
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/ftps-server-enforce-tls-resumption-s3-role-k8s
+  virtualService:
+    enabled: false
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - ftps-server-enforce-tls-resumption
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  PersistentVolumeClaims:
+    - name: ftps-server-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-ftps-server
+  volumes:
+    - name: ftps-server-nfs-storage
+      persistentVolumeClaim:
+        claimName: ftps-server-nfs-pvc
+  volumeMounts:
+    - mountPath: "/mnt/ftp-data"
+      name: ftps-server-nfs-storage
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.3.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+  extraObjects:
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        name: ftps-server-enforce-tls-resumption-nlb
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: "external"
+          service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+          service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+          service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+          service.beta.kubernetes.io/aws-load-balancer-subnets: "subnet-04a1c1a50bae3a830, subnet-0f76520da7867480b"
+          service.beta.kubernetes.io/aws-load-balancer-security-groups: "sg-0821586699276f503"
+      spec:
+        type: LoadBalancer
+        ports:
+          - name: ftp-control
+            port: 21
+            targetPort: 21
+            protocol: TCP
+          - name: pasv-10090
+            port: 10090
+            targetPort: 10090
+            protocol: TCP
+          - name: pasv-10091
+            port: 10091
+            targetPort: 10091
+            protocol: TCP
+          - name: pasv-10092
+            port: 10092
+            targetPort: 10092
+            protocol: TCP
+          - name: pasv-10093
+            port: 10093
+            targetPort: 10093
+            protocol: TCP
+          - name: pasv-10094
+            port: 10094
+            targetPort: 10094
+            protocol: TCP
+          - name: pasv-10095
+            port: 10095
+            targetPort: 10095
+            protocol: TCP
+          - name: pasv-10096
+            port: 10096
+            targetPort: 10096
+            protocol: TCP
+          - name: pasv-10097
+            port: 10097
+            targetPort: 10097
+            protocol: TCP
+          - name: pasv-10098
+            port: 10098
+            targetPort: 10098
+            protocol: TCP
+          - name: pasv-10099
+            port: 10099
+            targetPort: 10099
+            protocol: TCP
+          - name: pasv-10100
+            port: 10100
+            targetPort: 10100
+            protocol: TCP
+        selector:
+          app.kubernetes.io/name: ftps-server-enforce-tls-resumption
+          app.kubernetes.io/instance: ftps-server-enforce-tls-resumption
+          name: ftps-server-enforce-tls-resumption
+          app: ftps-server-enforce-tls-resumption
+        externalTrafficPolicy: Cluster

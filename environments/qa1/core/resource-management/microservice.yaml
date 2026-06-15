@@ -1,0 +1,157 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/api-gateway
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/io/sa/agent-management-service
+                  - cluster.local/ns/io/sa/js-runtime
+                  - cluster.local/ns/io/sa/gptverse
+                  - cluster.local/ns/di/sa/di-management-service
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/io/sa/internal-gateway
+                  - cluster.local/ns/io/sa/lookup-cache
+                  - cluster.local/ns/ui/sa/integrator-bff
+                  - cluster.local/ns/core/sa/streaming-service
+                  - cluster.local/ns/io/sa/celigo-agent
+                  - cluster.local/ns/io/sa/internal-gateway
+                  - cluster.local/ns/io/sa/audit-service
+                  - cluster.local/ns/io/sa/ai-agent-executor
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/core/sa/user-management
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "resource-management"
+    subscriptionType:
+      enabled: false
+    podDisruptionBudget:
+      enabled: true
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2.3
+          memory: 2.5Gi
+        requests:
+          cpu: 1.4
+          memory: 2Gi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 600
+      podAnnotations:
+        redeployTimestamp: 2026-06-11-12-00
+      livenessProbe:
+        config:
+          exec:
+            command:
+              - /bin/bash
+              - /opt/docker/probe-scripts/probe.sh
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        timeoutSeconds: 10
+        failureThreshold: 10
+        successThreshold: 1
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 8
+        maxReplicas: 25
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/resource-management-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - resource-management.celigo.io
+      - resource-management.core.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - resource-management
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  PersistentVolumeClaims:
+    - name: resource-management-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-resource-management
+  configVolume:
+    probe-config.json: |
+      {
+        "DUMP_ENABLED": true,
+        "HEAP_DUMP_THRESHOLD": 3,
+        "HEAPDUMP_ENABLED": false,
+        "MAX_PERF_DUMP_PER_HOUR": 1
+      }
+  volumes:
+    - name: probe-config-volume
+      configMap:
+        name: resource-management-config-volume
+    - name: resource-management-nfs-storage
+      persistentVolumeClaim:
+        claimName: resource-management-nfs-pvc
+  volumeMounts:
+    - mountPath: "/opt/probe-config"
+      name: probe-config-volume
+    - mountPath: /service-core-dumps
+      name: resource-management-nfs-storage
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.0.1.1553.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

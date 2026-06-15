@@ -1,0 +1,12 @@
+service: endpoint-service
+analysis:
+  source: splunk
+  query: >
+    search earliest=-5m index="production-na-web" "k8s.cluster.name"=production-na-aws-eks-us-east-1 "k8s.namespace.name" IN ("IO") "k8s.container.name"=endpoint-service k8s.pod.name=*canary*
+    NOT "/v1/connections/*/proxy" ((logName=serverHit sc IN (2*, 5*, 4*)) OR (level="error"  NOT DeprecationWarning NOT padLevels  NOT "logName=downStreamError" NOT "logName=failedToFetchSTSIdentityInfo" NOT invalidConfigMapFile NOT invalidConfig NOT "logName=SIGTERMHandler" NOT "message=SocketClosedUnexpectedlyError"  NOT "logName=logging422Errors"  NOT "logName=handleConcurrencyForUpdateDoc" NOT "enter AWS SDK for JavaScript" NOT "newrelic" NOT "<input " NOT "<div " NOT "</div" NOT "<p>" NOT "<script" NOT "global.console" NOT "logName=fatalResponse" NOT "level=info"  NOT "logName=stillOffline" NOT "logName=markOffline" NOT "logName=authcallbackFailure" NOT "Moment Timezone has no data for" NOT "logName=CodingError" NOT "logName=executeCustomMessageEvent" NOT "MaxListenersExceededWarning" NOT ("at toEpochTime" AND "@celigo/adaptor-common/lib/filterUtil.js") NOT "connector Parse error on line 1:" NOT ("logName=callbackAlreadyCalled" AND "adaptorType=HTTPExport") NOT ("&lt" OR "&quot" OR "&amp") NOT "edi_relationship_error_C" NOT "file_definition_error" NOT "logName=markOffline" NOT "logName=lookupEvaluationFailure" NOT 'handlebars_template_parse_error' NOT "edi_relationship_error_P" NOT "resource Parse error on line 1:" NOT "Unexpected error occured while masking JSON data" NOT "classificationEngineError" NOT "REQUEST_TIMEOUT" NOT "pagedExportError" NOT "netsuite_wsdl_tba_mandatory" NOT "unresolvedMapping" NOT "source: 'connector'"  NOT "logName=webSocketPongTimeout" NOT "logName=readinessFailure") OR "uncaughtException" OR "TypeError")
+    | stats count(eval(match(sc, "^2"))) as passCount, count(eval(match(sc, "^5") OR level="error")) as failCount, count(eval(searchmatch("uncaughtException") OR searchmatch("TypeError"))) as fatalCount, count as totalCount 
+    | eval errorRate=if(totalCount > 0, failCount/totalCount, 0)
+    | eval finalResultHolder=if(totalCount == 0 OR errorRate < 1, "true", "false")
+    | fields passCount, failCount, fatalCount, totalCount, errorRate, finalResultHolder
+    frequency: 7m
+disabled: false

@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "flow-management"
+    CUSTOM_URI: "http://flow-management.master-dev-io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "flow-management"
+    pullPolicy: Always
+    tag: ""

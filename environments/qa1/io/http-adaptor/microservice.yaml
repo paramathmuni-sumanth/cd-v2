@@ -1,0 +1,220 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/salesforce-adaptor
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/as2-adaptor
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/core/sa/api-execution
+                  - cluster.local/ns/io/sa/ai-agent-adaptor
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "http-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2.5
+          memory: 3814Mi
+        requests:
+          cpu: 900m
+          memory: 2534Mi
+      livenessProbe:
+        enabled: true
+        config:
+          exec:
+            command:
+              - /bin/bash
+              - /opt/docker/probe-scripts/probe.sh
+        initialDelaySeconds: 20
+        periodSeconds: 15
+        timeoutSeconds: 10
+        failureThreshold: 10
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        traffic.sidecar.istio.io/excludeOutboundPorts: '15001'
+        redeployTimestamp: 2026-04-13-23-09
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/http-adaptor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - http-adaptor.celigo.io
+      - http-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - http-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  PersistentVolumeClaims:
+    - name: http-adaptor-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-http-adaptor
+    - name: http-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-enterprise-logs
+  configVolume:
+    probe-config.json: |
+      {
+        "DUMP_ENABLED": true,
+        "HEAP_DUMP_THRESHOLD": 2,
+        "HEAP_DUMP_ENABLED": false,
+        "MAX_PERF_DUMP_PER_HOUR": 1
+      }
+  volumes:
+    - name: probe-config-volume
+      configMap:
+        name: http-adaptor-config-volume
+    - name: http-adaptor-nfs-storage
+      persistentVolumeClaim:
+        claimName: http-adaptor-nfs-pvc
+    - name: http-nfs-storage
+      persistentVolumeClaim:
+        claimName: http-nfs-pvc
+  volumeMounts:
+    - mountPath: /service-core-dumps
+      name: http-adaptor-nfs-storage
+    - mountPath: "/opt/probe-config"
+      name: probe-config-volume
+    - mountPath: "/mnt/efs"
+      name: http-nfs-storage
+  deployments:
+    - name: hpe-headers-temp-app
+      env:
+        NODE_OPTIONS: "--insecure-http-parser --max-old-space-size=2278"
+      deployment:
+        image:
+          tag: http-node-options-fb-0.0.1.977.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 2
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(640f079f7c5ece6a38ae26a0)$'
+    - name: temp-app
+      deployment:
+        image:
+          tag: http-node-options-fb-0.0.1.977.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 2
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(67dd0c4a81ec36e8383e6343)$'
+    - name: custom-header-routing-app
+      deployment:
+        image:
+          tag: ml-0.0.1.443.0
+      hpa:
+        autoscaling:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 2
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              'x-celigo-custom-route':
+                regex: '^(http-basic-auth)$'
+    - name: app-canary
+      deployment:
+        image:
+          tag: 2026.1.1.8-hotfix-fb-0.0.1.1000.0
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              x-celigo-version:
+                exact: v2
+    - name: app
+      deployment:
+        image:
+          tag: api-execution-logs-fb-1.0.0.1094.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

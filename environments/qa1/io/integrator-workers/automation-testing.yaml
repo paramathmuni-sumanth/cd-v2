@@ -1,0 +1,31 @@
+jobs:
+  - name: "Flow_run_Pricing_model_3"
+    env:
+      TAG: "@Zephyr-IO-T54472|@Zephyr-IO-T54473|@Zephyr-IO-T54474|@Zephyr-IO-T54491|@Zephyr-IO-T54492|@Zephyr-IO-T54493"
+  - name: "FlowDebugger"
+    env:
+      TAG: "@Zephyr-IO-T24486|@Zephyr-IO-T2494|@Zephyr-IO-T26713|@Zephyr-IO-T857"
+  - name: "DIM3_CeligoExport"
+    env:
+      TAG: "@Zephyr-IO-T42421|@Zephyr-IO-T42422|@Zephyr-IO-T42423|@Zephyr-IO-T42424|@Zephyr-IO-T42429|@Zephyr-IO-T42440|@Zephyr-IO-T42445|@Zephyr-IO-T42449|@Zephyr-IO-T42456|@Zephyr-IO-T42457|@Zephyr-IO-T42463|@Zephyr-IO-T42466"
+  - name: "FlowBranching_Stability_Test_Cases"
+    env:
+      TAG: "@Zephyr-IO-T20233|@Zephyr-IO-T20234|@Zephyr-IO-T20241|@Zephyr-IO-T20242|@Zephyr-IO-T20260|@Zephyr-IO-T20262|@Zephyr-IO-T20265|@Zephyr-IO-T20266|@Zephyr-IO-T20267|@Zephyr-IO-T20268|@Zephyr-IO-T26012"
+  - name: "FlowBranching_E2E_Flows"
+    env:
+      TAG: "@Zephyr-IO-T17390|@Zephyr-IO-T17391|@Zephyr-IO-T17427|@Zephyr-IO-T17428|@Zephyr-IO-T17557|@Zephyr-IO-T17685|@Zephyr-IO-T21679|@Zephyr-IO-T21833"
+  - name: "ENTERPRISE_LOGGING3"
+    env:
+      TAG: "@Zephyr-IO-T50718|@Zephyr-IO-T50724|@Zephyr-IO-T55355|@Zephyr-IO-T55356|@Zephyr-IO-T55357"
+  - name: "AccessData2"
+    env:
+      TAG: "@Zephyr-IO-T17808|@Zephyr-IO-T26798"
+  - name: "Dashboard"
+    env:
+      TAG: "@Zephyr-IO-T25429|@Zephyr-IO-T25430"
+  - name: "EM2.0_1"
+    env:
+      TAG: "@Zephyr-IO-T6309|@Zephyr-IO-T8900"
+  - name: "AccessData"
+    env:
+      TAG: "@Zephyr-IO-T17215"

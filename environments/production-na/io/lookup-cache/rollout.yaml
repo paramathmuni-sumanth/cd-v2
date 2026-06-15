@@ -1,0 +1,21 @@
+service: lookup-cache
+analysis:
+  source: splunk
+  query: >
+    search earliest=-2m index="apm_traces" "k8s.cluster.name"="production-na-aws-eks-us-east-1" "k8s.namespace.name" IN ("IO") "k8s.container.name"="lookup-cache" k8s.pod.name="*canary*" 
+    ((logName="serverHit" sc="2*" OR sc="5*" OR sc="4*") OR 
+    (level="error" NOT "DeprecationWarning" NOT "padLevels" NOT "logName=SIGTERMHandler" NOT "message=SocketClosedUnexpectedlyError" NOT "message=Missing dataRetentionPeriod." 
+    NOT "logName=logging422Errors" NOT "logName=handleConcurrencyForUpdateDoc" NOT "enter AWS SDK for JavaScript" NOT "newrelic" NOT "<input " NOT "<div " NOT "</div" NOT "<p>" 
+    NOT "<script" NOT "global.console" NOT "logName=fatalResponse" NOT "logName=stillOffline" NOT "logName=markOffline" NOT "logName=authcallbackFailure" 
+    NOT "Moment Timezone has no data for" NOT "logName=CodingError" NOT "logName=executeCustomMessageEvent" NOT "MaxListenersExceededWarning" 
+    NOT ("at toEpochTime" AND "/adaptor-common/lib/filterUtil.js") NOT "connector Parse error on line 1:") 
+    OR "uncaughtException" OR "TypeError" 
+    OR (logName="lookupCacheServiceHeartBeat" AND noOfOpenConnections>50) 
+    OR (logName="dynamoDBMetrics" AND unprocessedItemsCount>0))
+    | eval pass = if(match(sc, "^2"), 1, 0), fail = if(match(sc, "^5") OR level="error" OR searchmatch("uncaughtException") OR searchmatch("TypeError") OR (logName="lookupCacheServiceHeartBeat"), 1, 0)
+    | stats sum(pass) as passCount, sum(fail) as eventFails, count as totalCount, count(eval(logName="dynamoDBMetrics")) as unprocessedEvents
+    | eval failCount = eventFails + if(unprocessedEvents > 10, 1, 0)
+    | eval errorRate = if(totalCount > 0, failCount / totalCount, 0)
+    | eval finalResultHolder = if(totalCount == 0 OR errorRate < 0.001, "true", "false")
+    | fields passCount, failCount, totalCount, errorRate, finalResultHolder
+  frequency: 2m

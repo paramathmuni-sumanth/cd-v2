@@ -1,0 +1,41 @@
+service: jdbc-bridge
+analysis:
+  source: splunk
+  query: >
+    search earliest=-5m
+    index=apm_traces
+    k8s.cluster.name=qa1-aws-eks-ap-south-1
+    k8s.namespace.name=io
+    k8s.container.name=jdbc-bridge
+    k8s.pod.name=*canary*
+    (logName="webSocketOpen" OR logName="webSocketClose" OR log.iostream=stderr)
+    NOT *warning*
+    NOT "Sharing is only supported for boot loader classes"
+    | rename "log.iostream" as iostream
+    | eval fatal=if(iostream=="stderr", 1, 0)
+    | stats 
+        sum(fatal) as fatalCount, 
+        count(eval(logName="webSocketOpen")) as openCount, 
+        count(eval(logName="webSocketClose")) as closeCount 
+    | eval openConnectionCount=max(openCount - closeCount, 0),
+          finalResultHolder=case(
+              fatalCount > 0 OR openConnectionCount > 5, "false",
+              true(), "true"
+          )
+    | appendpipe [| stats count | where count==0 | eval fatalCount=0, openConnectionCount=0, finalResultHolder="true" | fields - count]
+    | fields fatalCount, openConnectionCount, finalResultHolder
+  frequency: 5m
+disabled: true
+versions:
+  - version: v2 
+    isPromotable: true
+    lastApplied: 2021-09-01 12:00:00
+    stages:
+      - wait: 10m
+        groups: ['DB Rollout user 1']
+      - wait: 10m
+        $push:
+          groups: ['DB Rollout user 2']
+      - wait: 10m
+        $push:
+          groups: ['DB Rollout user 3']

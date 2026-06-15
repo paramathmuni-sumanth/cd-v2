@@ -1,0 +1,43 @@
+service: js-runtime
+analysis:
+  source: splunk
+  query: >
+    search earliest=-15m index=production-na-utils k8s.namespace.name IN ("IO")
+    k8s.container.name="js-runtime" k8s.cluster.name=*production-na*
+    k8s.pod.name=*canary* (logName=jsRuntimeHeartbeat OR name=httpCallout OR
+    logName=noOfOpenConnections OR logName=jsRuntimeProcExit OR level IN
+    ("error", "fatal") OR *unhandled* OR *uncaught* OR *TypeError* OR
+    *exception* OR *fatal* NOT DeprecationWarning NOT padLevels NOT
+    "logName=SIGTERMHandler" NOT "message=SocketClosedUnexpectedlyError" NOT
+    "logName=logging422Errors" NOT "logName=handleConcurrencyForUpdateDoc" NOT
+    "enter AWS SDK for JavaScript" NOT "newrelic" NOT "<input " NOT "<div " NOT
+    "</div" NOT "<p>" NOT "<script" NOT "global.console" NOT
+    "logName=invalidConsoleLoggingRequest" NOT invalidUserLoggingRequest NOT
+    s3HeadError NOT s3PutError NOT s3DeleteError NOT failedToPostUserLogsToS3
+    NOT s3GetError NOT "New Relic for Node.js" NOT "Missing credentials in
+    config" NOT "Not starting without license key!" NOT "connect ECONNREFUSED
+    /tmp/com.celigo.js-runtime" NOT failedToFetchSTSIdentityInfo NOT
+    "statusCode=200" )  | rex field=_raw
+    "(?i)respawnCount[:=]\s*(?<respawnCount>\d+)"  | eval
+    callout_failure=if(match(statusCode, "^45"), 1, 0),
+      callout_timeout=if(match(_raw, "(?i)httpCalloutException"), 1, 0),
+      fail=if(logName!="jsRuntimeHeartbeat" AND match(_raw, "fatal|uncaught|Error|TypeError|unhandled"), 1, 0),
+      fatal=if(match(_raw, "(?i)SIGSEGV"), 1, 0),
+      openConnection=if(noOfOpenConnections > 150, 1, 0)
+    | stats sum(callout_timeout) as callout_timeout,  
+      sum(callout_failure) as callout_failure,
+      sum(respawnCount) AS totalRespawnCount,
+      sum(fail) as failCount, 
+      sum(fatal) as fatalCount, 
+      sum(openConnection) as openConnectionCount
+    | eval totalCount=passCount + failCount,
+      errorRate=if(totalCount > 0, failCount / totalCount, 0),
+      finalResultHolder=case(
+        fatalCount > 0 OR failCount > 0, "false",
+        totalRespawnCount > 5 , "false",
+        callout_timeout > 2000, "false",
+        true(), "true"
+      )
+    | appendpipe [| stats count | where count==0 | eval callout_timeout=0, callout_failure=0, failCount=0, fatalCount=0,respawnCount=0, openConnectionCount=0, finalResultHolder="true" | fields - count]            | fields callout_timeout, callout_failure, failCount, fatalCount, totalRespawnCount, openConnectionCount, finalResultHolder
+  frequency: 15m
+disabled: false

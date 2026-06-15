@@ -1,0 +1,31 @@
+jobs:
+  - name: "API_Management"
+    env:
+      TAG: "@Zephyr-IO-T18242|@Zephyr-IO-T28759|@Zephyr-IO-T28762|@Zephyr-IO-T28866|@Zephyr-IO-T50362|@Zephyr-IO-T53174"
+  - name: "APIM_MULTI_ENV_TEST"
+    env:
+      TAG: "@Zephyr-IO-T32713|@Zephyr-IO-T35030|@Zephyr-IO-T35458|@Zephyr-IO-T38356|@Zephyr-IO-T39788"
+  - name: "AshareId_Related_TCs"
+    env:
+      TAG: "@Zephyr-IO-T15519|@Zephyr-IO-T15525|@Zephyr-IO-T15526|@Zephyr-IO-T21701|@Zephyr-IO-T3375"
+  - name: "APIMADMIN"
+    env:
+      TAG: "@Zephyr-IO-T23653|@Zephyr-IO-T32713"
+  - name: "Flow_run_Pricing_model_6"
+    env:
+      TAG: "@Zephyr-IO-T35458|@Zephyr-IO-T49459|@Zephyr-IO-T50376|@Zephyr-IO-T50377|@Zephyr-IO-T50378|@Zephyr-IO-T50386"
+  - name: "FEATURED_TEMPLATES"
+    env:
+      TAG: "@Zephyr-IO-T40800"
+  - name: "Flow_run_Pricing_model"
+    env:
+      TAG: "@Zephyr-IO-T49459|@Zephyr-IO-T50376|@Zephyr-IO-T50377|@Zephyr-IO-T50378|@Zephyr-IO-T50386"
+  - name: "Splunk1_2"
+    env:
+      TAG: "@Zephyr-IO-T1691|@Zephyr-IO-T1692"
+  - name: "DI_CORE1_2"
+    env:
+      TAG: "@Zephyr-IO-T34380"
+  - name: "ManualContentType"
+    env:
+      TAG: "@Zephyr-IO-T59301|@Zephyr-IO-T59304|@Zephyr-IO-T59305|@Zephyr-IO-T59306|@Zephyr-IO-T59307|@Zephyr-IO-T59308|@Zephyr-IO-T59309|@Zephyr-IO-T59313|@Zephyr-IO-T59314|@Zephyr-IO-T59315|@Zephyr-IO-T59316|@Zephyr-IO-T59317|@Zephyr-IO-T59318|@Zephyr-IO-T59319|@Zephyr-IO-T59320|@Zephyr-IO-T59321|@Zephyr-IO-T59322|@Zephyr-IO-T59361|@Zephyr-IO-T59362|@Zephyr-IO-T59365|@Zephyr-IO-T59366|@Zephyr-IO-T59367|@Zephyr-IO-T59370|@Zephyr-IO-T59371|@Zephyr-IO-T59372|@Zephyr-IO-T59373|@Zephyr-IO-T59374|@Zephyr-IO-T59402|@Zephyr-IO-T59414|@Zephyr-IO-T59415|@Zephyr-IO-T59479|@Zephyr-IO-T59480|@Zephyr-IO-T59484|@Zephyr-IO-T59485|@Zephyr-IO-T59489|@Zephyr-IO-T59493|@Zephyr-IO-T59494|@Zephyr-IO-T59498|@Zephyr-IO-T59499|@Zephyr-IO-T59503|@Zephyr-IO-T59504|@Zephyr-IO-T59508|@Zephyr-IO-T59521|@Zephyr-IO-T59522|@Zephyr-IO-T59526|@Zephyr-IO-T59530|@Zephyr-IO-T59531|@Zephyr-IO-T59535|@Zephyr-IO-T59536|@Zephyr-IO-T59540|@Zephyr-IO-T59544|@Zephyr-IO-T59548|@Zephyr-IO-T59549|@Zephyr-IO-T59551|@Zephyr-IO-T59562|@Zephyr-IO-T59563|@Zephyr-IO-T59567|@Zephyr-IO-T59568|@Zephyr-IO-T59588|@Zephyr-IO-T59597|@Zephyr-IO-T59608|@Zephyr-IO-T59612|@Zephyr-IO-T59613|@Zephyr-IO-T59617|@Zephyr-IO-T59618|@Zephyr-IO-T59622|@Zephyr-IO-T59632|@Zephyr-IO-T59641|@Zephyr-IO-T59646|@Zephyr-IO-T59652|@Zephyr-IO-T59656|@Zephyr-IO-T59657|@Zephyr-IO-T59664|@Zephyr-IO-T59665|@Zephyr-IO-T59669|@Zephyr-IO-T59670|@Zephyr-IO-T59674|@Zephyr-IO-T60459|@Zephyr-IO-T60463|@Zephyr-IO-T60467|@Zephyr-IO-T60470|@Zephyr-IO-T60471|@Zephyr-IO-T60472|@Zephyr-IO-T60473|@Zephyr-IO-T60476|@Zephyr-IO-T60477|@Zephyr-IO-T60481|@Zephyr-IO-T60482|@Zephyr-IO-T60484|@Zephyr-IO-T60485|@Zephyr-IO-T60486|@Zephyr-IO-T60487|@Zephyr-IO-T60488|@Zephyr-IO-T60489|@Zephyr-IO-T60490|@Zephyr-IO-T60491|@Zephyr-IO-T60492|@Zephyr-IO-T60493|@Zephyr-IO-T60494|@Zephyr-IO-T60495|@Zephyr-IO-T60497|@Zephyr-IO-T60498|@Zephyr-IO-T60499|@Zephyr-IO-T60500|@Zephyr-IO-T60501|@Zephyr-IO-T60502|@Zephyr-IO-T60504|@Zephyr-IO-T60505|@Zephyr-IO-T60506"

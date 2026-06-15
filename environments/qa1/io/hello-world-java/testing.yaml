@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "hello-world-java"
+    CUSTOM_URI: "http://hello-world-java.io.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "hello-world-java"
+    pullPolicy: Always
+    tag: ""

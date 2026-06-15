@@ -1,86 +1,119 @@
-# cd-v2 — CD layout modernization (experimental)
+# cd-v2 — unified Celigo CD (all environments, one branch)
 
-Experimental sandbox for migrating Celigo's GitOps CD repo from **branch-per-environment** to **folder-per-environment** on a single default branch.
+Single-branch GitOps repo consolidating **all** Celigo deployment environments that were previously spread across:
 
-> **Not production.** ArgoCD in production clusters must continue to use [`celigo/cd`](https://github.com/celigo/cd) until an explicit per-environment cutover.
+- **`celigo/cd`** — env branches: `qa1`, `qa-prod`, `ia-qa`, `core`, `platform1-dev` … `platform5-dev`, `platform1-dev-dr`
+- **`celigo/cd-staging`** — `staging`
+- **`celigo/cd-prod`** — `production-na`, `production-eu`
+- **`celigo/dev-environments`** — `master-dev`
 
-## Repo roles
+> **Experimental / not production.** Production ArgoCD still points at the legacy repos until per-environment cutover.
 
-| Repo | Purpose |
-|------|---------|
-| [`celigo/cd`](https://github.com/celigo/cd) | Org source of truth (production GitOps) |
-| [`paramathmuni-sumanth/cd`](https://github.com/paramathmuni-sumanth/cd) | Regular fork — tickets and day-to-day env-branch PRs |
-| **`paramathmuni-sumanth/cd-v2`** (this repo) | Migration lab — new layout, scripts, ADRs, test Argo apps |
-
-## Target layout
+## Layout
 
 ```
 cd-v2/
-├── charts/                              # shared Helm charts
-├── base/{domain}/{service}/             # shared defaults per service
-│   └── microservice.yaml
-├── environments/{env}/{domain}/{service}/  # env-specific overrides only
-│   └── env.yaml
-├── argo/                                # ArgoCD Application manifests (v2 layout)
-├── scripts/                             # inventory, diff, promote helpers
-└── docs/                                # ADRs and migration tracking
+├── charts/                          # shared Helm charts (single copy)
+├── environments/
+│   ├── registry.yaml                # env metadata + legacy source mapping
+│   ├── qa1/                         # full service trees per env
+│   ├── qa-prod/
+│   ├── ia-qa/
+│   ├── core/
+│   ├── platform1-dev/ … platform5-dev/
+│   ├── platform1-dev-dr/
+│   ├── staging/
+│   ├── production-na/
+│   ├── production-eu/
+│   └── master-dev/
+│       └── {io,core,ia,di,ui,internal,tools}/
+│           └── {service}/
+│               ├── microservice.yaml
+│               ├── env.yaml         # when present
+│               └── argo_app_manifest.json  # legacy, for reference
+├── argo/                            # v2 ArgoCD Application manifests
+├── base/                            # optional future DRY layer (see base/README.md)
+├── scripts/
+└── docs/
 ```
 
-ArgoCD valueFiles (example):
+## Environments (14 total)
+
+| Folder | Legacy source | Tier |
+|--------|---------------|------|
+| `qa1` | `celigo/cd` → `qa1` | qa |
+| `qa-prod` | `celigo/cd` → `qa-prod` | qa |
+| `ia-qa` | `celigo/cd` → `ia-qa` | qa |
+| `core` | `celigo/cd` → `core` | qa |
+| `platform1-dev` … `platform5-dev` | `celigo/cd` | dev |
+| `platform1-dev-dr` | `celigo/cd` | dev |
+| `staging` | `celigo/cd-staging` → `staging` | staging |
+| `production-na` | `celigo/cd-prod` → `production-na` | production |
+| `production-eu` | `celigo/cd-prod` → `production-eu` | production |
+| `master-dev` | `celigo/dev-environments` → `master-dev` | dev |
+
+See [`environments/registry.yaml`](environments/registry.yaml) for full metadata.
+
+## ArgoCD (v2 layout)
 
 ```yaml
-valueFiles:
-  - ../../../base/io/hello-world/microservice.yaml
-  - ../../../environments/platform3-dev/io/hello-world/env.yaml
-targetRevision: main
+source:
+  path: charts/microservice
+  repoURL: https://github.com/paramathmuni-sumanth/cd-v2.git
+  targetRevision: main
+  helm:
+    valueFiles:
+      - ../../../environments/qa-prod/io/hello-world/microservice.yaml
+      - ../../../environments/qa-prod/io/hello-world/env.yaml   # if exists
 ```
 
-## Pilot
-
-| Item | Value |
-|------|-------|
-| Environment | `platform3-dev` |
-| Service | `io/hello-world` |
-| Status | See [docs/migration-status.md](docs/migration-status.md) |
-
-## Remotes
+Generate an app manifest:
 
 ```bash
-git remote add upstream https://github.com/celigo/cd.git
-git remote add cd-legacy https://github.com/paramathmuni-sumanth/cd.git   # optional
-```
-
-Sync chart or service content from org repo:
-
-```bash
-git fetch upstream
-# Example: export a service from an env branch
-git archive upstream/platform3-dev io/hello-world | tar -x
+./scripts/generate-argo-app.sh qa-prod io/integrator-workers
 ```
 
 ## Scripts
 
-| Script | Description |
-|--------|-------------|
-| `scripts/inventory-services.sh` | List all services under a domain from an upstream branch |
-| `scripts/diff-env-branches.sh` | Diff a service's YAML between two upstream branches |
-| `scripts/promote-service.sh` | Copy env overrides from one environment folder to another |
+| Script | Purpose |
+|--------|---------|
+| `import-all-environments.sh` | Re-sync all envs from upstream repos |
+| `inventory-services.sh` | List services on a legacy branch |
+| `diff-env-branches.sh` | Diff a service between two legacy branches |
+| `scaffold-service.sh` | Scaffold one service from upstream |
+| `promote-service.sh` | Copy env folder → env folder |
+| `generate-argo-app.sh` | Generate v2 Argo Application YAML |
 
-## Testing with ArgoCD
+### Re-import from upstream
 
-Point a **non-production** ArgoCD instance at this repo:
+```bash
+./scripts/import-all-environments.sh
+```
 
-- `repoURL`: `https://github.com/paramathmuni-sumanth/cd-v2.git`
-- `targetRevision`: `main`
-- Application manifest: `argo/platform3-dev/io/hello-world.yaml`
+## Git remotes
 
-Do not point production ArgoCD at this repo.
+| Remote | URL |
+|--------|------|
+| `origin` | `paramathmuni-sumanth/cd-v2` |
+| `upstream` | `celigo/cd` |
+| `upstream-staging` | `celigo/cd-staging` |
+| `upstream-prod` | `celigo/cd-prod` |
+| `upstream-dev-envs` | `celigo/dev-environments` |
+| `cd-legacy` | `paramathmuni-sumanth/cd` (your ticket fork) |
 
-## Contributing upstream
+## Repo roles
 
-When a pattern is validated here, port it to `paramathmuni-sumanth/cd` and open a PR to `celigo/cd`. See [docs/migration-status.md](docs/migration-status.md) for the promotion checklist.
+| Repo | Use |
+|------|-----|
+| `paramathmuni-sumanth/cd` | Day-to-day tickets, legacy env-branch PRs |
+| **`paramathmuni-sumanth/cd-v2`** | Unified layout, migration lab, future org CD |
+| `celigo/cd` (+ staging/prod) | Production GitOps today |
 
-## Related docs
+## Cutover plan
 
-- [ADR 001: Folder-based environments](docs/adr/001-folder-based-environments.md)
-- [Migration status](docs/migration-status.md)
+1. Validate render on test ArgoCD per environment
+2. Port Argo apps one env at a time (`targetRevision: main`, new valueFiles paths)
+3. Update `ci` repo validators + onboarding templates
+4. Deprecate legacy env branches/repos per environment
+
+Track progress in [`docs/migration-status.md`](docs/migration-status.md).

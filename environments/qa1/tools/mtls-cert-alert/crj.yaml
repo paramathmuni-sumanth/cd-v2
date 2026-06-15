@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mtls-cert-alert
+  namespace: default
+spec:
+  schedule: "0 0 1 * *"
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: mtls-cert-alert-serviceaccount
+          containers:
+          - name: cert-alert
+            image: 341118756977.dkr.ecr.ap-south-1.amazonaws.com/mtls:cert-expiry-alert
+            imagePullPolicy: Always
+            env:
+            - name: PRIVATE_CA_ARN
+              value: "arn:aws:acm-pca:ap-south-1:341118756977:certificate-authority/2c7c1ece-1972-4f06-b50f-375b0e8925df"
+            - name: BUCKET_NAME
+              value: "acm-pca-audit-report-qa"
+            - name: EMAIL_ADDRESS
+              value: "devops-ms@celigo.com"
+            - name: ENV_NAME
+              value: "qa1"
+            - name: DAYS
+              value: "7,15,30"
+            - name: AWS_REGION
+              value: "ap-south-1"
+            - name: SENDER_EMAIL
+              value: "staging@celigo.com"
+          restartPolicy: OnFailure

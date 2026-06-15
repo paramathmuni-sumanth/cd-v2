@@ -1,0 +1,328 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /metrics
+  common:
+    secretRef: newrelic-no-secrets
+    image:
+      repository: "860378520032.dkr.ecr.us-east-1.amazonaws.com"
+      name: "integrator-workers"
+    subscriptionType:
+      enabled: false
+    deployment:
+      livenessProbe:
+        failureThreshold: 6
+      readinessProbe:
+        failureThreshold: 3
+      revisionHistoryLimit: 1
+      replicaCount: 120
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 4
+          memory: 12Gi
+        requests:
+          cpu: 3.25
+          memory: 8Gi
+      startupProbe:
+        enabled: true
+        path: "/"
+        port: "9999"
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        timeoutSeconds: 10
+        successThreshold: 1
+        failureThreshold: 5
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; wget -qO- "http://localhost:5000/openConnections?terminate=true"; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- "http://localhost:5000/openConnections"); sleep 5; done; wget -qO- "http://localhost:5000/stopServer"; echo "Done";
+      podAnnotations:
+        celigo.io/scrape: 'fast'
+      terminationGracePeriodSeconds: 86400
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 2
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+    customToken:
+      enabled: true
+      image:
+        name: "token-refresher"
+        tag: "generic-v31"
+      refreshInterval: "43200"
+      expiryTime: "86700"
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/integrator-workers-s3-role-k8s-production-na
+  virtualService:
+    enabled: true
+    hosts:
+      - integrator-workers.celigo.io
+      - integrator-workers.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-workers
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: application-type
+                operator: In
+                values:
+                  - integrator_workers
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  configVolume:
+    memoryProfiling.json: |
+      {
+        "enabled": true,
+        "dumpInterval": 0,
+        "podPatterns": [
+        ],
+        "pods": {}
+      }
+  PersistentVolumeClaims:
+    - name: integrator-workers-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-enterprise-logs
+  volumes:
+    - name: integrator-workers-nfs-storage
+      persistentVolumeClaim:
+        claimName: integrator-workers-nfs-pvc
+    - name: integrator-workers-config
+      configMap:
+        name: integrator-workers-config-volume
+  volumeMounts:
+    - mountPath: "/mnt/efs"
+      name: integrator-workers-nfs-storage
+    - mountPath: "/etc/config/"
+      name: integrator-workers-config
+  tolerations:
+    - key: "application-type"
+      operator: "Equal"
+      value: "integrator_workers"
+      effect: "NoSchedule"
+  deployments:
+    - name: initsplit
+      env:
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+        WORKER_TYPE: "initsplit"
+      deployment:
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+        replicaCount: 2
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: high-concurrency
+      env:
+        WORKER_TYPE: "highConcurrency"
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+      deployment:
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+        replicaCount: 8
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: chuncking-queue-worker
+      env:
+        MAX_CONSUMER_LOAD: 35
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+        WORKER_TYPE: "ChunkingQueueWorker"
+        CIRCUIT_BREAKER_ENABLED: true
+        DATABASE_POOL_SIZE: 25
+        VISIBILITY_TIMEOUT_GUARD_ENABLED: true
+      deployment:
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+        replicaCount: 5
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: diprimeworker
+      env:
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+        WORKER_TYPE: "DIPrimeWorker"
+      deployment:
+        replicaCount: 4
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: diworker
+      env:
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+        WORKER_TYPE: "DIWorker"
+      deployment:
+        replicaCount: 4
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: iaothers
+      env:
+        WORKER_TYPE: "IAOthers"
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+      deployment:
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+        resources:
+          limits:
+            cpu: 4
+            memory: 12Gi
+          requests:
+            cpu: 2.75
+            memory: 8Gi
+        replicaCount: 7
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: ianetsuite
+      env:
+        WORKER_TYPE: "IANetsuite"
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+        MEMORY_PROFILING_THRESHOLD: 2500
+      deployment:
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+        resources:
+          limits:
+            cpu: 4
+            memory: 12Gi
+          requests:
+            cpu: 2.75
+            memory: 8Gi
+        replicaCount: 18
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: iashopify
+      env:
+        WORKER_TYPE: "IAShopify"
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+      deployment:
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+        resources:
+          limits:
+            cpu: 4
+            memory: 12Gi
+          requests:
+            cpu: 2.75
+            memory: 8Gi
+        replicaCount: 15
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: iaamazon
+      env:
+        WORKER_TYPE: "IAAmazon"
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+      deployment:
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+        resources:
+          limits:
+            cpu: 4
+            memory: 12Gi
+          requests:
+            cpu: 2.75
+            memory: 8Gi
+        replicaCount: 5
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: highcpu
+      env:
+        WORKER_TYPE: "highCPU"
+        MAX_CONSUMER_LOAD: 25
+        MAX_CONSUMER_CHILD_PROCESSES: 1
+      deployment:
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 2.5Gi
+          requests:
+            cpu: 1500m
+            memory: 2Gi
+        replicaCount: 10
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: app
+      env:
+        MAX_CONSUMER_LOAD: 100
+        MAX_CONSUMER_CHILD_PROCESSES: 2
+      deployment:
+        image:
+          tag: 2026.5.3.2-hotfix-fb-1.0.0.709.0
+        podAnnotations:
+          sidecar.istio.io/proxyCPU: '100m'
+          sidecar.istio.io/proxyCPULimit: '2'
+          sidecar.istio.io/proxyMemory: '300Mi'
+          sidecar.istio.io/proxyMemoryLimit: '4096Mi'
+          celigo.io/scrape: 'fast'
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

@@ -1,0 +1,188 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/master-dev-io/sa/salesforce-adaptor
+                  - cluster.local/ns/master-dev-io/sa/file-adaptor
+                  - cluster.local/ns/master-dev-io/sa/flow-management
+                  - cluster.local/ns/master-dev-core/sa/resource-management
+                  - cluster.local/ns/master-dev-io/sa/integrator-workers
+                  - cluster.local/ns/master-dev-io/sa/integrator-workers-ping
+                  - cluster.local/ns/master-dev-core/sa/integrator-system-workers
+                  - cluster.local/ns/master-dev-io/sa/as2-adaptor
+                  - cluster.local/ns/master-dev-io/sa/endpoint-service
+                  - cluster.local/ns/master-dev-core/sa/api-execution
+                  - cluster.local/ns/infra-tasks/sa/infra-tasks
+                  - cluster.local/ns/master-dev-io/sa/ai-agent-adaptor
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: http-adaptor
+    subscriptionType:
+      enabled: false
+    deployment:
+      minReadySeconds: 20
+      rolloutStrategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxSurge: 10%
+          maxUnavailable: 0
+      livenessProbe:
+        config:
+          exec:
+            command:
+              - /bin/bash
+              - /opt/docker/probe-scripts/probe.sh
+        initialDelaySeconds: 20
+        periodSeconds: 15
+        timeoutSeconds: 10
+        failureThreshold: 10
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2000m
+          memory: 3302Mi
+        requests:
+          cpu: 500m
+          memory: 2790Mi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        traffic.sidecar.istio.io/excludeOutboundPorts: '15001'
+        redeployTimestamp: 2025-12-17-14-35
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 1
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          tcpKeepalive:
+            time: 7200s
+            interval: 75s
+  ingress:
+    enabled: false
+  service:
+    extraLabels:
+      istio.io/persistent-session-header: x-session-header
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::028270547034:role/http-adaptor-s3-role-k8s-master-dev
+  virtualService:
+    enabled: true
+    gateways:
+      - istio-gateway/master-dev
+    hosts:
+      - http-adaptor.celigo.io
+      - http-adaptor.master-dev-io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - http-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  PersistentVolumeClaims:
+    - name: http-adaptor-nfs-pvc-fs-03926db75e0d38bd2
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-http-adaptor-master-dev
+    - name: http-nfs-pvc
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-enterprise-logs-master-dev
+  configVolume:
+    newRelic.json: |
+      {
+        "enableNR": true,
+        "distributedNR": true,
+        "transactions": ["all", "custom"],
+        "resources": {
+          "_userId": [],
+          "_importId": [],
+          "_exportId": [],
+          "_connectionId": []
+        }
+      }
+    probe-config.json: |
+      {
+        "DUMP_ENABLED": true,
+        "HEAP_DUMP_THRESHOLD": 2,
+        "HEAP_DUMP_ENABLED": false,
+        "MAX_PERF_DUMP_PER_HOUR": 1
+      }
+  volumes:
+    - name: probe-config-volume
+      configMap:
+        name: http-adaptor-config-volume
+    - name: http-adaptor-nr-config
+      configMap:
+        name: http-adaptor-config-volume
+    - name: http-adaptor-nfs-storage
+      persistentVolumeClaim:
+        claimName: http-adaptor-nfs-pvc-fs-03926db75e0d38bd2
+    - name: http-nfs-storage
+      persistentVolumeClaim:
+        claimName: http-nfs-pvc
+  volumeMounts:
+    - mountPath: "/http-adaptor/config/"
+      name: http-adaptor-nr-config
+    - mountPath: /service-core-dumps
+      name: http-adaptor-nfs-storage
+    - mountPath: "/opt/probe-config"
+      name: probe-config-volume
+    - mountPath: "/mnt/efs"
+      name: http-nfs-storage
+  deployments:
+    - name: app
+      env:
+        NODE_OPTIONS: "--no-network-family-autoselection"
+      deployment:
+        podAnnotations:
+          celigo.io/scrape: 'true'
+        image:
+          tag: xmldom-users-fb-1.0.0.1075.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

@@ -1,0 +1,7 @@
+{
+  "type": "helm",
+  "repo": "https://raw.githubusercontent.com/celigo/helm-charts/gh-pages/",
+  "name": "celigo-helm-chart",
+  "username": "",
+  "password": ""
+}

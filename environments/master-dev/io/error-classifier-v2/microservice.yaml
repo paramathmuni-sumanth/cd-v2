@@ -1,0 +1,118 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/master-dev-io/sa/integrator-workers
+                  - cluster.local/ns/master-dev-io/sa/integrator-workers-ping
+                  - cluster.local/ns/master-dev-core/sa/integrator-system-workers
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "error-classifier-v2"
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 5
+          memory: 4Gi
+        requests:
+          cpu: 400m
+          memory: 3Gi
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2024-08-12-14-45
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 1
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+        behavior:
+          scaleDown:
+            policies:
+              - periodSeconds: 45
+                type: Pods
+                value: 1
+            selectPolicy: Max
+            stabilizationWindowSeconds: 120
+          scaleUp:
+            policies:
+              - periodSeconds: 45
+                type: Percent
+                value: 10
+            selectPolicy: Max
+            stabilizationWindowSeconds: 90
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::028270547034:role/error-classifier-v2-s3-role-k8s-master-dev
+  virtualService:
+    enabled: true
+    gateways:
+      - istio-gateway/master-dev
+    hosts:
+      - error-classifier-v2.celigo.io
+      - error-classifier-v2.master-dev-io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - error-classifier-v2
+                    - prometheus-1277820838.ap-south-1.elb.amazonaws.com
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: application-type
+                operator: In
+                values:
+                  - error_classifier_v2
+  tolerations:
+    - key: "application-type"
+      operator: "Equal"
+      value: "error_classifier_v2"
+      effect: "NoSchedule"
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.111.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

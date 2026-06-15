@@ -1,0 +1,615 @@
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.istio.io/v1beta1","kind":"Gateway","metadata":{"annotations":{},"creationTimestamp":"2022-12-15T15:57:55Z","generation":8,"name":"istio-in-gw","namespace":"istio-gateway","resourceVersion":"40917015","uid":"0ceda1be-026c-47a3-9c73-885f6279b8ff"},"spec":{"selector":{"app":"istio-ingress"},"servers":[{"hosts":["*.celigo.io","celigo.io"],"port":{"name":"http","number":80,"protocol":"HTTP"}},{"hosts":["netsuite-webservices-adaptor.celigo.io"],"port":{"name":"netsuite-webservices-adaptor-https","number":443,"protocol":"HTTPS"},"tls":{"credentialName":"netsuite-webservices-adaptor-tls-credential","mode":"MUTUAL"}},{"hosts":["netsuite-webservices-adaptor.celigo.io"],"port":{"name":"netsuite-webservices-adaptor-http","number":80,"protocol":"HTTP"},"tls":{"httpsRedirect":true}},{"hosts":["amazon-netsuite-connector.ia.celigo.io"],"port":{"name":"amazon-netsuite-connector-https","number":443,"protocol":"HTTPS"},"tls":{"credentialName":"amazon-netsuite-connector-tls-credential","mode":"MUTUAL"}},{"hosts":["amazon-netsuite-connector.ia.celigo.io"],"port":{"name":"amazon-netsuite-connector-http","number":80,"protocol":"HTTP"}},{"hosts":["shopify-netsuite-connector.ia.celigo.io"],"port":{"name":"shopify-netsuite-connector-https","number":443,"protocol":"HTTPS"},"tls":{"credentialName":"shopify-netsuite-connector-tls-credential","mode":"MUTUAL"}},{"hosts":["shopify-netsuite-connector.ia.celigo.io"],"port":{"name":"shopify-netsuite-connector-http","number":80,"protocol":"HTTP"}},{"hosts":["magento-netsuite-connector.ia.celigo.io"],"port":{"name":"magento-netsuite-connector-https","number":443,"protocol":"HTTPS"},"tls":{"credentialName":"magento-netsuite-connector-tls-credential","mode":"MUTUAL"}},{"hosts":["bigcommerce-netsuite-connector.ia.celigo.io"],"port":{"name":"bigcommerce-netsuite-connector-https","number":443,"protocol":"HTTPS"},"tls":{"credentialName":"bigcommerce-netsuite-connector-tls-credential","mode":"MUTUAL"}},{"hosts":["walmart-netsuite-connector.ia.celigo.io"],"port":{"name":"walmart-netsuite-connector-https","number":443,"protocol":"HTTPS"},"tls":{"credentialName":"walmart-netsuite-connector-tls-credential","mode":"MUTUAL"}},{"hosts":["walmart-netsuite-connector.ia.celigo.io"],"port":{"name":"walmart-netsuite-connector-http","number":80,"protocol":"HTTP"},"tls":{"httpsRedirect":false}},{"hosts":["amazonmcf-netsuite-connector.ia.celigo.io"],"port":{"name":"amazonmcf-netsuite-connector-https","number":443,"protocol":"HTTPS"},"tls":{"credentialName":"amazonmcf-netsuite-connector-tls-credential","mode":"MUTUAL"}},{"hosts":["amazonmcf-netsuite-connector.ia.celigo.io"],"port":{"name":"amazonmcf-netsuite-connector-http","number":80,"protocol":"HTTP"},"tls":{"httpsRedirect":false}},{"hosts":["file-service.celigo.io"],"port":{"name":"file-service-https","number":443,"protocol":"HTTPS"},"tls":{"credentialName":"file-service-tls-credential","mode":"MUTUAL"}},{"hosts":["file-service.celigo.io"],"port":{"name":"file-service-http","number":80,"protocol":"HTTP"},"tls":{"httpsRedirect":false}},{"hosts":["square-netsuite-ia.ia.celigo.io"],"port":{"name":"square-netsuite-ia-connector-https","number":443,"protocol":"HTTPS"},"tls":{"credentialName":"square-netsuite-ia-tls-credential","mode":"MUTUAL"}},{"hosts":["square-netsuite-ia.ia.celigo.io"],"port":{"name":"square-netsuite-ia-connector-http","number":80,"protocol":"HTTP"},"tls":{"httpsRedirect":false}}]}}
+  creationTimestamp: "2022-12-15T15:57:55Z"
+  generation: 72
+  name: istio-in-gw
+  namespace: istio-gateway
+  resourceVersion: "600716201"
+  uid: 0ceda1be-026c-47a3-9c73-885f6279b8ff
+spec:
+  selector:
+    app: istio-ingress
+  servers:
+  - hosts:
+    - '*.celigo.io'
+    - celigo.io
+    port:
+      name: http
+      number: 80
+      protocol: HTTP
+  - hosts:
+    - netsuite-webservices-adaptor.celigo.io
+    port:
+      name: netsuite-webservices-adaptor-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: netsuite-webservices-adaptor-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - netsuite-webservices-adaptor.celigo.io
+    port:
+      name: netsuite-webservices-adaptor-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - amazon-netsuite-connector.ia.celigo.io
+    port:
+      name: amazon-netsuite-connector-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: amazon-netsuite-connector-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - amazon-netsuite-connector.ia.celigo.io
+    port:
+      name: amazon-netsuite-connector-http
+      number: 80
+      protocol: HTTP
+  - hosts:
+    - shopify-netsuite-connector.ia.celigo.io
+    port:
+      name: shopify-netsuite-connector-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: shopify-netsuite-connector-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - shopify-netsuite-connector.ia.celigo.io
+    port:
+      name: shopify-netsuite-connector-http
+      number: 80
+      protocol: HTTP
+  - hosts:
+    - magento-netsuite-connector.ia.celigo.io
+    port:
+      name: magento-netsuite-connector-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: magento-netsuite-connector-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - bigcommerce-netsuite-connector.ia.celigo.io
+    port:
+      name: bigcommerce-netsuite-connector-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: bigcommerce-netsuite-connector-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - walmart-netsuite-connector.ia.celigo.io
+    port:
+      name: walmart-netsuite-connector-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: walmart-netsuite-connector-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - walmart-netsuite-connector.ia.celigo.io
+    port:
+      name: walmart-netsuite-connector-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - amazonmcf-netsuite-connector.ia.celigo.io
+    port:
+      name: amazonmcf-netsuite-connector-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: amazonmcf-netsuite-connector-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - amazonmcf-netsuite-connector.ia.celigo.io
+    port:
+      name: amazonmcf-netsuite-connector-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - file-service.celigo.io
+    port:
+      name: file-service-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: file-service-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - file-service.celigo.io
+    port:
+      name: file-service-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - square-netsuite-ia.ia.celigo.io
+    port:
+      name: square-netsuite-ia-connector-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: square-netsuite-ia-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - square-netsuite-ia.ia.celigo.io
+    port:
+      name: square-netsuite-ia-connector-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - ebay-netsuite-connector.ia.celigo.io
+    port:
+      name: ebay-netsuite-connector-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: ebay-netsuite-connector-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - ebay-netsuite-connector.ia.celigo.io
+    port:
+      name: ebay-netsuite-connector-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - rdbms-adaptor.celigo.io
+    port:
+      name: rdbms-adaptor-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: rdbms-adaptor-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - rdbms-adaptor.celigo.io
+    port:
+      name: rdbms-adaptor-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - data-warehouse-adaptor.celigo.io
+    port:
+      name: data-warehouse-adaptor-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: data-warehouse-adaptor-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - data-warehouse-adaptor.celigo.io
+    port:
+      name: data-warehouse-adaptor-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - hightech-connectors.ia.celigo.io
+    port:
+      name: hightech-connectors-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: hightech-connectors-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - hightech-connectors.ia.celigo.io
+    port:
+      name: hightech-connectors-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - nosql-db-adaptor.celigo.io
+    port:
+      name: nosql-db-adaptor-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: nosql-db-adaptor-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - nosql-db-adaptor.celigo.io
+    port:
+      name: nosql-db-adaptor-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - netsuite-distributed-adaptor.celigo.io
+    port:
+      name: netsuite-distributed-adaptor-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: netsuite-distributed-adaptor-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - netsuite-distributed-adaptor.celigo.io
+    port:
+      name: netsuite-distributed-adaptor-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - api-gateway.celigo.io
+    port:
+      name: api-gateway-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: api-gateway-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - api-gateway.celigo.io
+    port:
+      name: api-gateway-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - authentication-service.celigo.io
+    port:
+      name: authentication-service-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: authentication-service-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - authentication-service.celigo.io
+    port:
+      name: authentication-service-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - gptverse.celigo.io
+    port:
+      name: gptverse-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: gptverse-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - gptverse.celigo.io
+    port:
+      name: gptverse-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - internal-gateway.celigo.io
+    port:
+      name: internal-gateway-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: internal-gateway-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - internal-gateway.celigo.io
+    port:
+      name: internal-gateway-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: false
+  - hosts:
+    - http-adaptor.celigo.io
+    port:
+      name: http-adaptor-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: http-adaptor-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - http-adaptor.celigo.io
+    port:
+      name: http-adaptor-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - system-apis.celigo.io
+    port:
+      name: system-apis-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: system-apis-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - system-apis.celigo.io
+    port:
+      name: system-apis-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - error-classifier-v2.celigo.io
+    port:
+      name: error-classifier-v2-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: error-classifier-v2-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - error-classifier-v2.celigo.io
+    port:
+      name: error-classifier-v2-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - resource-management.celigo.io
+    port:
+      name: resource-management-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: resource-management-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - resource-management.celigo.io
+    port:
+      name: resource-management-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - salesforce-adaptor.celigo.io
+    port:
+      name: salesforce-adaptor-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: salesforce-adaptor-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - salesforce-adaptor.celigo.io
+    port:
+      name: salesforce-adaptor-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - flow-management.celigo.io
+    port:
+      name: flow-management-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: flow-management-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - flow-management.celigo.io
+    port:
+      name: flow-management-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - integrator-workers.celigo.io
+    port:
+      name: integrator-workers-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: integrator-workers-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - integrator-workers.celigo.io
+    port:
+      name: integrator-workers-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - js-runtime.celigo.io
+    port:
+      name: js-runtime-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: js-runtime-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - js-runtime.celigo.io
+    port:
+      name: js-runtime-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - file-adaptor.celigo.io
+    port:
+      name: file-adaptor-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: file-adaptor-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - file-adaptor.celigo.io
+    port:
+      name: file-adaptor-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - as2-adaptor.celigo.io
+    port:
+      name: as2-adaptor-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: as2-adaptor-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - as2-adaptor.celigo.io
+    port:
+      name: as2-adaptor-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - error-notification.celigo.io
+    port:
+      name: error-notification-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: error-notification-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - error-notification.celigo.io
+    port:
+      name: error-notification-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - resolved-linegraphs.celigo.io
+    port:
+      name: resolved-linegraphs-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: resolved-linegraphs-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - resolved-linegraphs.celigo.io
+    port:
+      name: resolved-linegraphs-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - error-linegraphs.celigo.io
+    port:
+      name: error-linegraphs-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: error-linegraphs-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - error-linegraphs.celigo.io
+    port:
+      name: error-linegraphs-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - error-management.celigo.io
+    port:
+      name: error-management-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: error-management-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - error-management.celigo.io
+    port:
+      name: error-management-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - di-management-service.celigo.io
+    port:
+      name: di-management-service-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: di-management-service-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - di-management-service.celigo.io
+    port:
+      name: di-management-service-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - data-catalog-service.celigo.io
+    port:
+      name: data-catalog-service-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: data-catalog-service-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - data-catalog-service.celigo.io
+    port:
+      name: data-catalog-service-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - lookup-cache.celigo.io
+    port:
+      name: lookup-cache-https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: lookup-cache-tls-credential
+      mode: MUTUAL
+  - hosts:
+    - lookup-cache.celigo.io
+    port:
+      name: lookup-cache-http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true

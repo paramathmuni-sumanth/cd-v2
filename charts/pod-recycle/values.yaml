@@ -1,0 +1,121 @@
+pod-recycle:
+  global:
+    jobs:
+      backoffLimit: 0
+      restartPolicy: Never
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      pullPolicy: Always
+    resources:
+      requests:
+        cpu: 200m
+        memory: 0.2Gi
+
+  jobs:
+    - name: hello-world-recycle
+      template: true
+      image: pod-recycle
+      tag: generic
+      jobType: cronJob
+      schedule: "*/2 * * * *"
+      namespace: ia
+      serviceAccount:
+        annotations: {}
+      Role:
+      - apiGroups: [""]
+        resources: ["pods"]
+        verbs: ["get", "list", "delete"]
+      env:
+        LABEL_SELECTOR: "app=hello-world"
+    - name: splunk-otel-collector-recycle
+      template: false
+      image: pod-recycle
+      tag: generic
+      jobType: cronJob
+      schedule: "0 0 * * 0"
+      namespace: splunk-otel-collector
+      serviceAccount:
+        annotations: {}
+      Role:
+      - apiGroups: [""]
+        resources: ["pods"]
+        verbs: ["get", "list", "delete"]
+      env:
+        LABEL_SELECTOR: "app=splunk-otel-collector"
+    - name: js-runtime-ms-recycle
+      template: false
+      image: pod-recycle
+      tag: deployment
+      jobType: cronJob
+      schedule: "0 0 */5 * *"
+      namespace: io
+      serviceAccount:
+        annotations: {}
+      Role:
+      - apiGroups: ["apps"]
+        resources: ["deployments"]
+        verbs: ["list","get","patch"]
+      env:
+        DEPLOYMENT_NAME: "js-runtime-app"
+    - name: cpksql-recycle
+      template: false
+      image: pod-recycle
+      tag: memory-threshold
+      jobType: cronJob
+      schedule: "*/30 * * * *"
+      namespace: core
+      serviceAccount:
+        annotations: {}
+      Role:
+      - apiGroups: ["","metrics.k8s.io"]
+        resources: ["pods"]
+        verbs: ["get", "list", "delete"]
+      env:
+        LABEL_SELECTOR: "app=cp-ksql-server"
+        MEMORY_THRESHOLD_PERCENT: "70"
+        MEMORY_THRESHOLD_ON: "LIMITS"
+    - name: api-execution-recycle                # CLOUDOPS‑9825
+      template: false                            # concrete job (not the “hello‑world” template)
+      image: pod-recycle
+      tag: memory-threshold                      # runs the generic %‑of‑X script
+      jobType: cronJob
+      schedule: "*/5 * * * *"                    # every 5 minutes
+      namespace: core                         # first stop: qa‑prod
+      serviceAccount:
+        annotations: {}
+      Role:
+        # needs pod *and* metrics‑server access to calculate usage
+        - apiGroups: ["", "metrics.k8s.io"]
+          resources: ["pods"]
+          verbs: ["get", "list", "delete"]
+      env:
+        # Target workload
+        LABEL_SELECTOR: "app=api-execution"
+        # Recycle when usage ≥ 70 % of the *request*
+        MEMORY_THRESHOLD_PERCENT: "70"
+        MEMORY_THRESHOLD_ON: "REQUESTS"
+    - name: efs-ws-cron-job-data-warehouse-adaptor
+      template: false
+      image: pod-recycle
+      tag: efs-ws-cron-job
+      jobType: cronJob
+      schedule: "0 0 * * *"
+      namespace: io
+      serviceAccount:
+        annotations: {}
+      volumes:
+        - name: efs-ws-cron-job-nfs-storage
+          persistentVolumeClaim:
+            claimName: data-warehouse-adaptor-fs-08c5cfab3a09b34c2
+      volumeMounts:
+        - mountPath: "/data/"
+          name: efs-ws-cron-job-nfs-storage
+      Role:
+      - apiGroups: [""]
+        resources: ["pods"]
+        verbs: ["get", "list"]
+      env:
+        APP_NAME: "data-warehouse-adaptor"
+        EFS_MOUNT_PATH: "/data/"
+        NAMESPACE: "io"
+        DEBUG_SLEEP: "1"

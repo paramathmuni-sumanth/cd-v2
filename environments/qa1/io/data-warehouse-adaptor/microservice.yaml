@@ -1,0 +1,174 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/io/sa/file-adaptor
+                  - cluster.local/ns/core/sa/api-execution
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  configVolume:
+    logLevel.json: |
+      {
+        "default": "debug",
+        "configPerPod": true,
+        "pods": {
+          "pod1": "debug",
+          "pod2": "warn"
+        }
+      }
+    newRelic.json: "{\n  \"enableNR\": true,\n  \"distributedNR\": true,\n  \"transactions\": [\"custom\"],\n  \"resources\": {\n    \"_userId\": [], \n    \"_importId\": [], \n    \"_exportId\": [],\n    \"_connectionId\": []\n  }\n}\n"
+    probe-config.json: "{\n  \"DUMP_ENABLED\": true,\n  \"HEAP_DUMP_THRESHOLD\": 3,\n  \"HEAP_DUMP_ENABLED\": false,\n  \"MAX_PERF_DUMP_PER_HOUR\": 2 \n}\n"
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "data-warehouse-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      livenessProbe:
+        enabled: true
+        config:
+          exec:
+            command:
+              - /bin/bash
+              - /opt/docker/probe-scripts/probe.sh
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        timeoutSeconds: 10
+        failureThreshold: 5
+        successThreshold: 1
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1100m
+          memory: 1000Mi
+        requests:
+          cpu: 190m
+          memory: 500Mi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2026-05-13-05-00
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/data-warehouse-adaptor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - data-warehouse-adaptor.celigo.io
+      - data-warehouse-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - data-warehouse-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  PersistentVolumeClaims:
+    - name: data-warehouse-adaptor-fs-0ccfd13610402245f
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-sc-dwh
+    - name: data-warehouse-adaptor-cpu-profiling-fs-0bfb3883ab9bfe5b5
+      accessModes:
+        - ReadWriteMany
+      storage: 5Gi
+      storageClassName: efs-ws-sc
+  volumes:
+    - name: config-volume
+      configMap:
+        name: data-warehouse-adaptor-config-volume
+    - name: data-warehouse-adaptor-nfs-storage
+      persistentVolumeClaim:
+        claimName: data-warehouse-adaptor-fs-0ccfd13610402245f
+    - name: data-warehouse-adaptor-cpu-profiling-nfs-storage
+      persistentVolumeClaim:
+        claimName: data-warehouse-adaptor-cpu-profiling-fs-0bfb3883ab9bfe5b5
+    - name: data-warehouse-adaptor-nr-config
+      configMap:
+        name: data-warehouse-adaptor-config-volume
+    - name: probe-config-volume
+      configMap:
+        name: data-warehouse-adaptor-config-volume
+  volumeMounts:
+    - mountPath: "/data-warehouse-adaptor/bulk_load_files/"
+      name: data-warehouse-adaptor-nfs-storage
+    - mountPath: /service-core-dumps
+      name: data-warehouse-adaptor-cpu-profiling-nfs-storage
+    - name: config-volume
+      mountPath: /etc/config
+    - mountPath: "/data-warehouse-adaptor/config/"
+      name: data-warehouse-adaptor-nr-config
+    - mountPath: /opt/probe-config
+      name: probe-config-volume
+  deployments:
+    - name: app
+      deployment:
+        image:
+          tag: ml-0.1.14.160.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

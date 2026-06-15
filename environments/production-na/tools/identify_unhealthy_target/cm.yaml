@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: identify-unhealthy-target
+  namespace: default
+data:
+  identify_unhealthy_target.py: |
+    import boto3
+    import sys
+    def get_nlb_arn(nlb_name, region):
+        session = boto3.Session()
+        client = session.client('elbv2', region_name=region)
+        try:
+            response = client.describe_load_balancers(Names=[nlb_name])
+            return response['LoadBalancers'][0]['LoadBalancerArn']
+        except client.exceptions.LoadBalancerNotFoundException as e:
+            print(f"Load balancer not found: {e}")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+    def get_target_group_arns(nlb_arn, client):
+        try:
+            response = client.describe_target_groups(LoadBalancerArn=nlb_arn)
+            return [tg['TargetGroupArn'] for tg in response['TargetGroups']]
+        except Exception as e:
+            print(f"Error retrieving target group ARNs: {e}")
+            sys.exit(1)
+    def check_nlb_target_health(target_group_arns, client):
+        for target_group_arn in target_group_arns:
+            try:
+                response = client.describe_target_health(TargetGroupArn=target_group_arn)
+                for target in response['TargetHealthDescriptions']:
+                    target_id = target['Target']['Id']
+                    health_state = target['TargetHealth']['State']
+                    health_desc = target['TargetHealth'].get('Description', 'No description available')
+                    print(f"Target Group ARN: {target_group_arn}, Target ID: {target_id}, State: {health_state}, Description: {health_desc}")
+            except Exception as e:
+                print(f"Error retrieving target health: {e}")
+    if __name__ == "__main__":
+        if len(sys.argv) != 3:
+            print("Usage: script.py <nlb_arn> <region>")
+            sys.exit(1)
+        NLB_ARN = sys.argv[1]
+        REGION = sys.argv[2]
+        print(f"Using NLB ARN: {NLB_ARN}, Region: {REGION}")
+        session = boto3.Session()
+        client = session.client('elbv2', region_name=REGION)
+        
+        target_group_arns = get_target_group_arns(NLB_ARN, client)
+        check_nlb_target_health(target_group_arns, client)

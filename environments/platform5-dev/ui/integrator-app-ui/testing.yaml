@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "integrator-app-ui"
+    CUSTOM_URI: "http://integrator-app-ui.ui.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "integrator-app-ui"
+    pullPolicy: Always
+    tag: ""

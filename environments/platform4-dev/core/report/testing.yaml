@@ -1,0 +1,9 @@
+testing:
+  env:
+    SERVICE: "report"
+    CUSTOM_URI: "http://report.core.svc.cluster.local"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "report"
+    pullPolicy: Always
+    tag: ""

@@ -1,0 +1,269 @@
+prometheus:
+  imagePullSecrets: []
+
+  serviceAccounts:
+    server:
+      create: true
+      name: "prometheus-server"
+      annotations: {}
+
+  configmapReload:
+    reloadUrl: ""
+    prometheus:
+      enabled: true
+      name: configmap-reload
+      image:
+        repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com/prometheus-config-reloader
+        tag: v0.88.0
+        pullPolicy: IfNotPresent
+      containerPort: 8080
+      containerPortName: metrics
+      resources: 
+        requests:
+          memory: 128Mi
+          cpu: 100m
+        limits:
+          memory: 512Mi
+          cpu: 250m
+
+  server:
+    name: server
+
+    # namespaces:
+    #   - yournamespace
+
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com/prometheus
+      tag: v3.9.1
+      pullPolicy: IfNotPresent
+
+    env: []
+    defaultFlagsOverride: []
+
+    extraFlags:
+      - web.enable-lifecycle
+
+    configPath: /etc/config/prometheus.yml
+
+    global:
+      scrape_interval: 1m
+      scrape_timeout: 10s
+      evaluation_interval: 1m
+    
+    extraVolumes:
+      - name: prometheus-secrets
+        secret:
+          secretName: newrelic-secrets
+    
+    extraVolumeMounts:
+      - name: prometheus-secrets
+        mountPath: /etc/secrets/prometheus
+        readOnly: true
+
+    remoteWrite:
+      - url: https://metric-api.newrelic.com/prometheus/v1/write?prometheus_server=prometheus-server-qa-prod
+        authorization:
+          credentials_file: /etc/secrets/prometheus/NEW_RELIC_LICENSE_KEY
+        write_relabel_configs:
+          - source_labels: [__name__]
+            regex: '^celigo_(.*)'
+            action: keep
+        queue_config:
+          capacity: 20000
+          min_shards: 4
+          max_shards: 16
+          max_samples_per_send: 5000
+          batch_send_deadline: 5s
+          min_backoff: 100ms
+          max_backoff: 5s
+
+    ingress:
+      enabled: false
+    
+    strategy:
+      type: Recreate
+
+    nodeSelector: {}
+    affinity: {}
+    podAntiAffinity: ""
+    podAntiAffinityTopologyKey: kubernetes.io/hostname
+    topologySpreadConstraints: []
+    podDisruptionBudget:
+      enabled: false
+
+    persistentVolume:
+      enabled: true
+      statefulSetNameOverride: ""
+      accessModes:
+        - ReadWriteOnce
+      mountPath: /data
+      size: 100Gi
+    
+    replicaCount: 2
+
+    statefulSet:
+      enabled: true
+      annotations: {}
+      labels: {}
+      podManagementPolicy: OrderedReady
+      pvcDeleteOnStsDelete: false
+      pvcDeleteOnStsScale: false
+
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 6Gi
+      requests:
+        cpu: 500m
+        memory: 5Gi
+
+    service:
+      enabled: true
+      statefulsetReplica:
+        enabled: true
+        replica: 0
+
+    terminationGracePeriodSeconds: 300
+    retention: "30d"
+    retentionSize: ""
+
+  scrapeConfigs: null  
+
+  serverFiles:
+    prometheus.yml:
+      rule_files:
+        - /etc/config/recording_rules.yml
+        - /etc/config/alerting_rules.yml
+        - /etc/config/rules
+        - /etc/config/alerts
+
+      scrape_configs:
+        - job_name: prometheus
+          static_configs:
+            - targets:
+              - localhost:9090
+
+        - job_name: 'istiod-metrics'
+          kubernetes_sd_configs:
+            - role: endpoints
+              namespaces:
+                names:
+                - istio-system
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+              action: keep
+              regex: istiod;http-monitoring
+
+        - job_name: 'proxy-metrics'
+          metrics_path: /stats/prometheus
+          kubernetes_sd_configs:
+            - role: pod
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_container_port_name]
+              action: keep
+              regex: '.*-envoy-prom'
+
+        - job_name: 'kube-state-metrics'
+          scheme: https
+          tls_config:
+            ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            insecure_skip_verify: true
+          bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+          kubernetes_sd_configs:
+          - role: endpoints
+          relabel_configs:
+          - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
+            action: keep
+            regex: 'metrics-server'
+          - source_labels: [__meta_kubernetes_namespace]
+            action: keep
+            regex: kube-system
+
+        - job_name: 'kube-state-metrics-2'
+          scheme: http
+          kubernetes_sd_configs:
+          - role: endpoints
+          relabel_configs:
+          - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
+            action: keep
+            regex: 'kube-state-metrics'
+          - source_labels: [__meta_kubernetes_namespace]
+            action: keep
+            regex: newrelic
+
+        - job_name: 'kubernetes-pods-celigo'
+          kubernetes_sd_configs:
+            - role: endpoints
+              namespaces:
+                names:
+                - io
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_annotation_celigo_io_scrape]
+              action: keep
+              regex: true
+            - source_labels: [__meta_kubernetes_endpoint_ready]
+              action: keep
+              regex: true
+            - source_labels: [__meta_kubernetes_endpoint_port_name]
+              action: keep
+              regex: http
+            - source_labels: [__meta_kubernetes_pod_annotation_celigo_io_path]
+              action: replace
+              target_label: __metrics_path__
+              regex: (.+)
+            - source_labels: [__meta_kubernetes_namespace]
+              target_label: namespace
+            - source_labels: [__meta_kubernetes_pod_name]
+              target_label: podName
+            - source_labels: [__meta_kubernetes_service_label_app, __meta_kubernetes_pod_label_deploymentName]
+              target_label: deploymentName
+              separator: "-"
+              action: replace
+            - target_label: clusterName
+              replacement: qa-prod
+              action: replace
+
+        - job_name: 'kubernetes-pods-celigo-fast'
+          scrape_interval: 15s
+          scrape_timeout: 10s
+          kubernetes_sd_configs:
+            - role: endpoints
+              namespaces:
+                names:
+                - io
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_annotation_celigo_io_scrape]
+              action: keep
+              regex: fast
+            - source_labels: [__meta_kubernetes_endpoint_ready]
+              action: keep
+              regex: true
+            - source_labels: [__meta_kubernetes_endpoint_port_name]
+              action: keep
+              regex: http
+            - source_labels: [__meta_kubernetes_pod_annotation_celigo_io_path]
+              action: replace
+              target_label: __metrics_path__
+              regex: (.+)
+            - source_labels: [__meta_kubernetes_namespace]
+              target_label: namespace
+            - source_labels: [__meta_kubernetes_pod_name]
+              target_label: podName
+            - source_labels: [__meta_kubernetes_service_label_app, __meta_kubernetes_pod_label_deploymentName]
+              target_label: deploymentName
+              separator: "-"
+              action: replace
+            - target_label: clusterName
+              replacement: qa-prod
+              action: replace
+  alertmanager:
+    enabled: false
+
+  kube-state-metrics:
+    enabled: false
+
+  prometheus-node-exporter:
+    enabled: false
+
+  prometheus-pushgateway:
+    enabled: false

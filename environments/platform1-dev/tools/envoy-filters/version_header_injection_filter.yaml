@@ -1,0 +1,83 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: version-header-injection-filter
+  namespace: istio-system
+spec:
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: ANY
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.lua
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+            inline_code: |
+              function envoy_on_request(request_handle)
+                handleHeaderInjection(request_handle)
+              end
+
+              function handleHeaderInjection(request_handle)
+                -- Retrieve the :authority header
+                local authority = request_handle:headers():get(":authority")
+                -- request_handle:logCritical("Authority: " .. (authority or "nil"))
+
+                -- Retrieve the x-celigo-routes header
+                local routing_info = request_handle:headers():get("x-celigo-routes")
+                -- request_handle:logCritical("Routing Info: " .. (routing_info or "nil"))
+
+                -- Retrive the userid header for logging
+                local userid = request_handle:headers():get("userid")
+
+                if not authority or not routing_info then
+                    return
+                end
+
+                if not userid then
+                    userid = "unknown"
+                end
+
+                -- Define patterns to match the authority
+                local patterns = {
+                    "^([%w%-]+)%.%w+%.svc%.cluster%.local$",  -- <microservice>.<namespace>.svc.cluster.local
+                    "^([%w%-]+)%.ia%.celigo%.io$",           -- <microservice>.ia.celigo.io
+                    "^([%w%-]+)%.celigo%.io$"                -- <microservice>.celigo.io
+                }
+
+                local microservice = nil
+
+                -- Check if the authority matches any of the patterns
+                for _, pattern in ipairs(patterns) do
+                    microservice = string.match(authority, pattern)
+                    if microservice then
+                        -- request_handle:logCritical("Matched Microservice: " .. microservice)
+                        break
+                    end
+                end
+
+                if not microservice then
+                    -- request_handle:logCritical("No microservice found")
+                    return
+                end
+
+                -- Decode the x-celigo-routes header
+                local version = nil
+                for service, ver in string.gmatch(routing_info, "([^,]+):([^,]+)") do
+                    if service == microservice then
+                        version = ver
+                        -- request_handle:logCritical("Matched Version: " .. version)
+                        break
+                    end
+                end
+                
+                if version then
+                    request_handle:headers():add("x-celigo-version", version)
+                    request_handle:logCritical("logName=injectedHeader userid=" .. userid .. " x-celigo-version=" .. version .. " microservice=" .. microservice)
+                end
+              end

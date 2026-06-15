@@ -1,0 +1,107 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 860378520032.dkr.ecr.us-east-1.amazonaws.com
+      name: self-service-portal
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 800m
+          memory: 1Gi
+        requests:
+          cpu: 300m
+          memory: 750Mi
+      terminationGracePeriodSeconds: 600
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::860378520032:role/self-service-portal-s3-role-k8s-production-na
+  virtualService:
+    enabled: true
+    gateways:
+      - istio-gateway/self-service-portal
+    hosts:
+      - api.ssp.devops.integrator.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - self-service-portal
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: worker-app
+      deployment:
+        replicaCount: 2
+        image:
+          tag: ml-1.0.2.115.0
+        livenessProbe:
+          enabled: false
+        readinessProbe:
+          enabled: false
+        gracefulShutDown:
+          enabled: true
+          preStop:
+            exec:
+              command:
+                - sh
+                - '-c'
+                - sleep 5; echo Done;
+      hpa:
+        autoscaling:
+          enabled: false
+      env:
+        MODE: WORKER
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.2.115.0
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

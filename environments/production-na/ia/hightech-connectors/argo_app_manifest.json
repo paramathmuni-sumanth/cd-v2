@@ -1,0 +1,38 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "hightech-connectors",
+    "namespace": "argocd",
+    "finalizers": [
+      "resources-finalizer.argocd.argoproj.io"
+    ]
+  },
+  "spec": {
+    "project": "ia",
+    "source":{
+      "helm":{
+        "valueFiles": [
+        "../../ia/hightech-connectors/microservice.yaml",
+        "../../ia/hightech-connectors/env.yaml"
+        ]
+      },
+      "path": "charts/microservice",
+      "repoURL": "https://github.com/celigo/cd-prod.git",
+      "targetRevision": "production-na"
+    },
+    "destination":{
+      "namespace": "ia",
+      "server": "https://kubernetes.default.svc"
+    },
+    "syncPolicy":{
+      "automated":{
+        "prune": true,
+        "selfHeal": true
+      },
+      "syncOptions": [
+        "CreateNamespace=true"
+      ]
+    }
+  }
+}

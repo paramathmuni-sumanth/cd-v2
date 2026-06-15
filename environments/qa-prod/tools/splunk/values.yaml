@@ -1,0 +1,46 @@
+distribution: 'eks'
+
+# splunkObservability:
+#   accessToken: 
+#   realm: us1
+#   logsEnabled: true
+#   profilingEnabled: true
+
+splunkPlatform:
+  endpoint: https://http-inputs-celigo.splunkcloud.com:443/services/collector
+  token: 
+  metricsIndex: apm_metrics
+  index: apm_traces
+  metricsEnabled: true
+  source: "kubernetes-qa-prod"
+
+clusterName: qa-prod-aws-eks-ap-south-1
+environment: qa-prod
+
+autodetect:
+  istio: true
+
+gateway:
+  enabled: false
+
+logsEngine: otel
+
+logsCollection:
+  # Container logs collection
+  containers:
+    multilineConfigs:
+      - namespaceName:
+          value: io
+        firstEntryRegex: ^[^\s].*
+      - namespaceName:
+          value: ia
+        firstEntryRegex: ^[^\s].*
+      - namespaceName:
+          value: ui
+        firstEntryRegex: ^[^\s].*
+      - namespaceName:
+          value: core
+        firstEntryRegex: ^[^\s].*
+      - namespaceName:
+          value: testing
+        firstEntryRegex: ^[^\s].*

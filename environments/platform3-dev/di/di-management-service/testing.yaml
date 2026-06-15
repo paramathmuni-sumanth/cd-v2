@@ -1,0 +1,17 @@
+testing:
+  env:
+    SERVICE: "di-management-service"
+    CUSTOM_URI: "http://api-gateway.io.svc.cluster.local"
+    TAG: "cd"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "di-management-service"
+    pullPolicy: Always
+    tag: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

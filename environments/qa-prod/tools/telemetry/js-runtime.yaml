@@ -1,0 +1,14 @@
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: js-runtime-access-logs
+  namespace: io
+spec:
+  selector:
+    matchLabels:
+      app: js-runtime
+  accessLogging:
+    - providers:
+      - name: access-log-provider
+      filter:
+        expression: response.code >= 300

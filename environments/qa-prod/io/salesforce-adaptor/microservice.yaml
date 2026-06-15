@@ -1,0 +1,309 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - to:
+            - operation:
+                paths:
+                  - "/stopServer"
+                  - "/openConnections"
+    allow:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/testing/sa/default
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/io/sa/integrator-workers
+                  - cluster.local/ns/core/sa/integrator-system-workers
+                  - cluster.local/ns/io/sa/endpoint-service
+                  - cluster.local/ns/core/sa/resource-management
+                  - cluster.local/ns/io/sa/flow-management
+                  - cluster.local/ns/core/sa/api-execution
+                  - cluster.local/ns/testing/sa/loadtesting
+        - to:
+            - operation:
+                methods:
+                  - GET
+                paths:
+                  - /metrics
+  common:
+    image:
+      repository: "341118756977.dkr.ecr.ap-south-1.amazonaws.com"
+      name: "salesforce-adaptor"
+    subscriptionType:
+      enabled: false
+    deployment:
+      startupProbe:
+        enabled: true
+        path: /startupz
+        port: 5000
+        initialDelaySeconds: 5
+        periodSeconds: 2
+        timeoutSeconds: 3
+        failureThreshold: 30
+      livenessProbe:
+        failureThreshold: 6
+        initialDelaySeconds: 0
+      readinessProbe:
+        failureThreshold: 3
+        initialDelaySeconds: 0
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 2
+          memory: 3Gi
+        requests:
+          cpu: 300m
+          memory: 2Gi
+      gracefulShutDown:
+        enabled: true
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count="";  while ! [ "$count" = "$expected" ]; do count=$(wget -qO- 'http://localhost:5000/openConnections?preStopMode=true'); sleep 1; if [ "$count" = "$expected" ]; then for i in `seq 1 5`; do count=$(wget -qO- 'http://localhost:5000/openConnections?terminate=true'); sleep 5; done; fi; done; sleep 60; wget -qO- 'http://localhost:5000/stopServer'; echo "Done";
+      terminationGracePeriodSeconds: 14400
+      podAnnotations:
+        redeployTimestamp: 2026-03-26-08-52
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 2
+        maxReplicas: 5
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 50
+  destinationRules:
+    enabled: true
+    trafficPolicy:
+      loadBalancer:
+        consistentHash:
+          httpHeaderName: "wsId"
+      outlierDetection:
+        maxEjectionPercent: 0
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::689472371083:role/salesforce-adaptor-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - salesforce-adaptor.celigo.io
+      - salesforce-adaptor.io.svc.cluster.local
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - salesforce-adaptor
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  configVolume:
+    logLevel.json: |
+      {
+        "default": "info",
+        "configPerPod": false
+      }
+  volumes:
+    - name: loglevel-config-volume
+      configMap:
+        name: salesforce-adaptor-config-volume
+  volumeMounts:
+    - mountPath: "/etc/config/"
+      name: loglevel-config-volume
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: startupprob-tag
+      deployment:
+        image:
+          tag: infra-changes-fb-0.0.1.171.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 5
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.80, celigo_metrics_open_connections{deploymentName="salesforce-adaptor-startupprob-tag"})
+                threshold: "50"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              userid:
+                regex: '^(63d74f95bd157e46d551d3a3)$'
+      sidecar:
+        enabled: true
+        inboundConnectionPool:
+          tcp:
+            maxConnections: 200
+    - name: devops-13536
+      deployment:
+        image:
+          tag: ml-0.0.1.152.0
+        resources:
+          limits:
+            cpu: 2
+            memory: 2Gi
+          requests:
+            cpu: 1.3
+            memory: 1.5Gi
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 15
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.80, celigo_metrics_open_connections{deploymentName="salesforce-adaptor-devops-13536"})
+                threshold: "200"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - headers:
+              executionContextUserId:
+                regex: '^(66cdf01e2b903592d14af806)$'
+      sidecar:
+        enabled: true
+        inboundConnectionPool:
+          tcp:
+            maxConnections: 200
+    - name: app
+      deployment:
+        podAnnotations:
+          celigo.io/scrape: 'fast'
+        image:
+          tag: ml-0.0.1.157.0
+      hpa:
+        keda:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 5
+          pollingInterval: 15
+          cooldownPeriod: 60
+          triggers:
+            - type: prometheus
+              metricType: Value
+              name: open-connections
+              metadata:
+                serverAddress: http://prometheus-server.prometheus.svc.cluster.local:80
+                query: quantile(0.80, celigo_metrics_open_connections{deploymentName="salesforce-adaptor-app"})
+                threshold: "60"
+            - type: cpu
+              name: cpu-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+            - type: memory
+              name: memory-utilization
+              metricType: Utilization
+              metadata:
+                value: "70"
+          behavior:
+            scaleDown:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+            scaleUp:
+              policies:
+                - periodSeconds: 45
+                  type: Percent
+                  value: 25
+              selectPolicy: Max
+              stabilizationWindowSeconds: 120
+      destinationRules:
+        trafficPolicy:
+          outlierDetection:
+            maxEjectionPercent: 50
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+      sidecar:
+        enabled: true
+        inboundConnectionPool:
+          tcp:
+            maxConnections: 200

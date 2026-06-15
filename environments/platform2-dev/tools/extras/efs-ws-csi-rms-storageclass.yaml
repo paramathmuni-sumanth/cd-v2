@@ -1,0 +1,17 @@
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: efs-ws-sc-rms
+provisioner: efs.csi.aws.com
+parameters:
+  provisioningMode: efs-ap
+  fileSystemId: fs-08df69d06ea21cd82
+  directoryPerms: "777"
+  gid: "0"
+  uid: "0"
+  # gidRangeStart: "50000" # optional /data/dump
+  # gidRangeEnd: "50000" # optional
+  basePath: "/websocket" # optional
+  subPathPattern: "/data" # optional
+  # ensureUniqueDirectory: "false" # optional
+  # reuseAccessPoint: "false" # optional

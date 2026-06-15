@@ -1,0 +1,9 @@
+apiVersion: v2
+name: pod-recycle
+type: application
+version: 0.1.1
+appVersion: "1.0.0"
+dependencies:
+- name: pod-recycle
+  version: 0.1.1
+  repository: https://raw.githubusercontent.com/celigo/helm-charts/gh-pages/

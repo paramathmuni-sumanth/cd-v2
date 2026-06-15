@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: recycle-opsworks-jsrt
+  namespace: recycle-opsworks
+spec:
+  schedule: "00 16 * * MON"
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccount: recycle-opsworks-jsrt
+          serviceAccountName: recycle-opsworks-jsrt
+          containers:
+          - name: recycle-opsworks-jsrt
+            image: 341118756977.dkr.ecr.ap-south-1.amazonaws.com/recycle-opsworks-jsrt:1.0.0
+            imagePullPolicy: Always
+            envFrom:
+            - configMapRef:
+                name: recycle-opsworks-jsrt-config-map
+            resources:
+              requests:
+                cpu: 500m
+                memory: 500Mi
+          restartPolicy: OnFailure

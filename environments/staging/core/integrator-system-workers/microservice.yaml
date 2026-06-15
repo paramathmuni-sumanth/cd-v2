@@ -1,0 +1,119 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+        - from:
+            - source:
+                principals:
+                  - cluster.local/ns/monitoring/sa/gatus-gitops
+          to:
+            - operation:
+                notPaths:
+                  - "/readyz"
+  common:
+    image:
+      repository: 860378520032.dkr.ecr.us-east-1.amazonaws.com
+      name: integrator-system-workers
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 3
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: 1500m
+          memory: 6Gi
+        requests:
+          cpu: 1000m
+          memory: 4Gi
+      terminationGracePeriodSeconds: 7200
+      gracefulShutDown:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-c'
+              - expected="0"; count=""; wget -qO- "http://localhost:5000/openConnections?terminate=true"; while ! [ "$count" = "$expected" ]; do count=$(wget -qO- "http://localhost:5000/openConnections"); sleep 5; done; wget -qO- "http://localhost:5000/stopServer"; echo "Done";
+      podAnnotations:
+        redeployTimestamp: 2026-05-11-11-00
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 2
+        maxReplicas: 10
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::609704034070:role/integrator-system-workers-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - integrator-system-workers.core.svc.cluster.local
+      - integrator-system-workers.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - integrator-system-workers
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      matchLabelKeys:
+        - pod-template-hash
+  deployments:
+    - name: sandbox-migration-do-not-remove
+      env:
+        WORKER_TYPE: "sandboxMigration"
+        MAX_LOAD: 1
+        MAX_CONSUMER_CHILD_PROCESSES: 1
+      deployment:
+        image:
+          tag: 2026.5.3-patch-1.0.0.266.0
+        resources:
+          limits:
+            cpu: 1500m
+            memory: 8192Mi
+          requests:
+            cpu: 1000m
+            memory: 6144Mi
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
+    - name: app
+      deployment:
+        image:
+          tag: 2026.5.3-patch-1.0.0.266.0
+      env:
+        MAX_CONSUMER_LOAD: 100
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

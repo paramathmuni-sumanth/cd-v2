@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: identify-unhealthy-target
+  namespace: default
+spec:
+  suspend: true
+  schedule: "* * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          volumes:
+          - name: script-volume
+            configMap:
+              name: identify-unhealthy-target
+          serviceAccountName: identify-unhealthy-target
+          containers:
+          - name: identify-unhealthy-target
+            image: 860378520032.dkr.ecr.us-east-1.amazonaws.com/identify_unhealthy_target:generic-v1
+            command:
+            - "/bin/sh"
+            - "-c"
+            args:
+            - |
+              python /scripts/identify_unhealthy_target.py $NLB_ARN $REGION
+            volumeMounts:
+            - name: script-volume
+              mountPath: "/scripts"
+            env:
+            - name: NLB_ARN
+              value: "arn:aws:elasticloadbalancing:eu-central-1:860378520032:loadbalancer/net/a8327826c6fcc4465afcc0533ac4ebee/457aa2d0c5471d64"
+            - name: REGION
+              value: "eu-central-1"

@@ -1,0 +1,31 @@
+testing:
+  annotations:
+    sidecar.istio.io/inject: "false"
+# List of job names to create
+# This can be name of the Test Suites to run
+  jobs:
+    - "Webhook"
+    - "webhook1"
+    - "webhook2"
+
+  # Name of the environment variable that will contain the job name
+  # If not provided or empty, no job-specific environment variable will be created
+  var_name: "SUITES"
+  env:
+    SERVICE: "webhooks"
+    CUSTOM_URI: "https://api.qa.staging.integrator.io"
+    NODE_ENV: "qa"
+    TAGS: "CDE2E"
+    ENV: "qa"
+  image:
+    repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+    name: "celigo-api-automation"
+    pullPolicy: Always
+    TAG: "cdtests"
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+    requests:
+      cpu: 1000m
+      memory: 4Gi

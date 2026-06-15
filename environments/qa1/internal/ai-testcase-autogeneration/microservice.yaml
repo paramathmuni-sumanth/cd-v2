@@ -1,0 +1,102 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/testing/sa/default
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: ai-testcase-autogeneration
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "2560Mi"
+        requests:
+          cpu: "250m"
+          memory: "1Gi"
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2025-10-24-16-50
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
+    hpa:
+      autoscaling:
+        enabled: false
+        minReplicas: 2
+        maxReplicas: 3
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::341118756977:role/ai-testcase-autogeneration-s3-role-k8s
+  virtualService:
+    enabled: true
+    hosts:
+      - ai-testcase-autogeneration.internal.svc.cluster.local
+      - ai-testcase-autogeneration.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - ai-testcase-autogeneration
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: api
+      deployment:
+        replicaCount: 3
+        image:
+          tag: ml-1.0.0.392.0
+      env:
+        MODE: "api"
+      subsetConfig:
+        selectorLabels: {}
+        routes:
+          - uri:
+              regex: '^/api/v[12]/test-.*$'
+            method:
+              exact: GET
+          - uri:
+              regex: '^/api/v[12]/test-.*$'
+            method:
+              exact: POST
+    - name: app
+      deployment:
+        image:
+          tag: ml-1.0.0.392.0
+      env:
+        MODE: "streamlit"
+      subsetConfig:
+        selectorLabels: {}
+        routes: []

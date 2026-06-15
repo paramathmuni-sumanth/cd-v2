@@ -1,0 +1,28 @@
+service: file-service
+analysis:
+  source: splunk
+  query: >
+    search
+    earliest=-5m 
+    index="production-na-utils"
+    k8s.cluster.name=production-na-aws-eks-us-east-1
+    k8s.namespace.name IN ("IO")
+    k8s.container.name=file-service
+    k8s.pod.name=*canary*
+    (logName=serverHit OR (level IN ("error", "fatal") NOT "enter AWS SDK for JavaScript" NOT "newrelic" NOT "PGP_PUBLICKEY_INVALID" NOT "PGP_PRIVATEKEY_INVALID" NOT "PGP_FILE_READ_ERROR" NOT "AS2_DECRYPTION_FAILED" NOT "AS2_VERIFICATION_FAILED" NOT "PGP_ENCRYPT_ERROR") OR *unhandled* OR *uncaught* OR *TypeError* OR *fatal*)
+    | eval pass=if(sc >= 200 AND sc < 300, 1, 0),
+           fail=if(sc >= 300 OR match(_raw, "(?i)fatal|unexpected|uncaught|error|typeerror|unhandled"), 1, 0),
+           fatal=if(level="fatal", 1, 0),
+           relevantForTotal=if(logName="serverHit", 1, 0)
+    | stats sum(pass) as passCount,   
+            sum(fail) as failCount, 
+            sum(fatal) as fatalCount,
+            sum(relevantForTotal) as totalCount
+    | eval  finalResultHolder=case(
+               fatalCount >= 1, "false",
+               true(), "true"
+           )
+    | appendpipe [| stats count | where count==0 | eval passCount=0, failCount=0, fatalCount=0, totalCount=0, finalResultHolder="true" | fields - count]           
+    | fields passCount, failCount, fatalCount, totalCount, finalResultHolder
+  frequency: 5m
+disabled: false

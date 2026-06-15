@@ -1,0 +1,39 @@
+service: resource-management
+analysis:
+  source: splunk
+  query: >
+    search earliest=-5m index="production-na-web" "k8s.cluster.name"=production-na-aws-eks-us-east-1 "k8s.namespace.name" IN ("core") "k8s.container.name"=resource-management k8s.pod.name=*canary*
+    ((logName=serverHit sc IN (2*, 5*, 4*)) OR level="error" OR "uncaughtException" OR "TypeError") NOT */settingsForm/init NOT /v1/agents/update/latest.yml NOT "isDownstreamError"
+    | rex max_match=0 "traceId=(?<allTraceIds>\w+)"
+    | eval outerTraceId=mvindex(allTraceIds, -1)
+    | join type=left outerTraceId
+        [search index="production-na-web" "k8s.cluster.name"=production-na-aws-eks-us-east-1 "k8s.namespace.name" IN ("core") "k8s.container.name"=resource-management k8s.pod.name=*canary* logName=fatalResponse "salesforce-adaptor"
+        | rename traceId as outerTraceId
+        | dedup outerTraceId
+        | eval is_sfdc_fatal=1
+        | fields outerTraceId is_sfdc_fatal]
+    | where isnull(is_sfdc_fatal)
+    | eval pass=if(match(sc, "^2"), 1, 0), fail=if(match(sc, "^5")  OR (level="error" AND logName!=fatalResponse) OR searchmatch("uncaughtException") OR searchmatch("TypeError"), 1, 0)
+    | stats sum(pass) as passCount, sum(fail) as failCount, count as totalCount
+    | eval errorRate=if(totalCount > 0, failCount/totalCount, 0)
+    | eval finalResultHolder=if(totalCount == 0 OR errorRate < 0.001, "true", "false")
+    | fields passCount, failCount, totalCount, errorRate, finalResultHolder
+  frequency: 7m
+disabled: false
+versions:
+  - version: 2026.5.1.4
+    rollbackStrategy: "Partial"
+    isPromotable: true
+    lastApplied: 2021-09-01 12:00:00
+    stages:
+      - wait: 3h
+        groups: ['free', 'internal']
+      - wait: 18h
+        $push:
+          groups: ['phase1-1', 'phase1-2']
+      - wait: 24h
+        $push:
+          groups: ['phase2-1', 'phase2-2']
+      - wait: 22h
+        $push:
+          groups: ['phase3-1', 'phase3-2', 'free-trial']

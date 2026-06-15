@@ -1,0 +1,16 @@
+jobs:
+  - name: "Salesforce"
+    env:
+      TAG: "@Zephyr-IO-T2853|@Zephyr-IO-T37328|@Zephyr-IO-T830|@Zephyr-IO-T831|@Zephyr-IO-T834|@Zephyr-IO-T837|@Zephyr-IO-T8895|@Zephyr-IO-T8896|@Zephyr-IO-T8897|@Zephyr-IO-T8900"
+  - name: "Salesforce_MS_Regression1"
+    env:
+      TAG: "@Zephyr-IO-T16365|@Zephyr-IO-T16366|@Zephyr-IO-T16367|@Zephyr-IO-T16368"
+  - name: "SF_BULKAPI4"
+    env:
+      TAG: "@Zephyr-IO-T1624|@Zephyr-IO-T830|@Zephyr-IO-T8900"
+  - name: "SF_BULKAPI5"
+    env:
+      TAG: "@Zephyr-IO-T30583|@Zephyr-IO-T30592|@Zephyr-IO-T32210|@Zephyr-IO-T32266|@Zephyr-IO-T32284|@Zephyr-IO-T37886|@Zephyr-IO-T37887|@Zephyr-IO-T44565|@Zephyr-IO-T44635"
+  - name: "STANDALONE_SF"
+    env:
+      TAG: "@Zephyr-IO-T18868|@Zephyr-IO-T18870|@Zephyr-IO-T18871|@Zephyr-IO-T799|@Zephyr-IO-T800|@Zephyr-IO-T801|@Zephyr-IO-T802"

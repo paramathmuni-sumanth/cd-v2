@@ -1,0 +1,37 @@
+{
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+        "name": "load-testing",
+        "namespace": "argocd",
+        "finalizers": [
+            "resources-finalizer.argocd.argoproj.io"
+        ]
+    },
+    "spec": {
+        "project": "testing",
+        "source": {
+            "helm": {
+                "valueFiles": [
+                    "values.yaml"
+                ]
+            },
+            "path": "charts/load-testing",
+            "repoURL": "https://github.com/celigo/cd.git",
+            "targetRevision": "qa-prod"
+        },
+        "destination": {
+            "namespace": "testing",
+            "server": "https://kubernetes.default.svc"
+        },
+        "syncPolicy": {
+            "automated": {
+                "prune": true,
+                "selfHeal": true
+            },
+            "syncOptions": [
+                "CreateNamespace=true"
+            ]
+        }
+    }
+}

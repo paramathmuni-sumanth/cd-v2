@@ -1,0 +1,26 @@
+service: jdbc-bridge
+analysis:
+  source: splunk
+  query: >
+    search earliest=-5m 
+      index=production-eu-adaptors
+      k8s.cluster.name=production-eu-aws-eks-eu-central-1
+      k8s.namespace.name=io
+      k8s.container.name=jdbc-bridge
+      k8s.pod.name=*canary*
+      (log.iostream=stderr OR logName=requestStarts)
+      NOT *warning*
+      NOT "Sharing is only supported for boot loader classes"
+      NOT (wsId=*fatal* OR wsId=*error* OR traceId=*fatal* OR traceId=*error*)
+      NOT "*String index out of range*"
+      NOT "*SLF4J*"
+      NOT logName=webSocketError
+      | rename "log.iostream" as iostream
+      | eval fatal=if(iostream=="stderr", 1, 0)
+      | eval ocCount=if(logName=="requestStarts", oc, null())
+      | stats sum(fatal) as fatalCount, max(ocCount) as openConnectionCount
+      | eval finalResultHolder=if(fatalCount > 0 OR openConnectionCount > 25, "false", "true")
+      | appendpipe [| stats count | where count==0 | eval fatalCount=0, openConnectionCount=0, finalResultHolder="true" | fields - count]
+      | fields fatalCount, openConnectionCount, finalResultHolder
+  frequency: 5m
+disabled: false
