@@ -1,0 +1,65 @@
+microservice:
+  authorizationPolicy:
+    deny:
+      enabled: true
+      rules:
+        - from:
+            - source:
+                notPrincipals:
+                  - cluster.local/ns/istio-ingress/sa/istio-ingress
+                  - cluster.local/ns/testing/sa/default
+        - to:
+            - operation:
+                paths:
+                  - /stopServer
+                  - /openConnections
+  common:
+    image:
+      repository: 341118756977.dkr.ecr.ap-south-1.amazonaws.com
+      name: hello-world
+    subscriptionType:
+      enabled: false
+    deployment:
+      revisionHistoryLimit: 1
+      replicaCount: 1
+      containerPort: 5000
+      terminationGracePeriodSeconds: 300
+      podAnnotations:
+        redeployTimestamp: 2024-05-09-11-00
+    hpa:
+      autoscaling:
+        enabled: true
+        minReplicas: 1
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
+  destinationRules:
+    enabled: true
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 80
+  serviceAccount:
+    create: true
+  virtualService:
+    enabled: true
+    hosts:
+      - hello-world.io.svc.cluster.local
+      - hello-world.celigo.io
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - hello-world
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deployments:
+    - name: app
+      subsetConfig:
+        selectorLabels: {}
+        routes: []
